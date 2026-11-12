@@ -29,7 +29,21 @@ Com a sincronização ativada (Supabase, gratuito), o que você lança no comput
 - **Relatórios em PDF, Excel e CSV**: resumo do período, despesas e receitas por categoria, fluxo de caixa mensal, comparativo categorias × meses, extrato da conta com saldo linha a linha, lançamentos detalhados, orçamento × realizado, saldos das contas em uma data e faturas do cartão.
 - **Orçamentos** por categoria, com alerta de ritmo e sugestão automática pela média dos últimos 3 meses.
 - **Metas**: valor guardado manualmente ou ligado ao saldo de uma conta. Mostra quanto guardar por mês.
+- **Endividamento**: cadastro de empréstimos, financiamentos, cheque especial, acordos e contas atrasadas, além dos cartões de crédito, que entram automaticamente.
+  - **Indicadores**: total devido, parcelas por mês, valor em atraso, juros médios e **comprometimento da renda**. A referência usual é: até 30% saudável, até 50% atenção, acima disso crítico.
+  - **Plano de quitação**: simula a estratégia *avalanche* (maiores juros primeiro) e a *bola de neve* (menores saldos primeiro), com um valor extra opcional por mês. Mostra em quantos meses você fica livre das dívidas e quanto economiza de juros.
+  - **Pagamentos**: ao registrar um pagamento, o app lança a despesa na conta, abate do saldo devedor e marca a dívida como quitada quando ela zera.
+  - **Registrato (Banco Central)**: importa o PDF "Empréstimos e Financiamentos (SCR)". Esse relatório lista tudo o que os bancos informam no seu CPF. Reimportar todo mês **atualiza** os valores, sem duplicar.
+  - **Atalhos para as consultas gratuitas oficiais**: Serasa, SPC Brasil, Boa Vista (SCPC) e protestos em cartório (CENPROT).
+  - **Relatório** de endividamento em PDF ou Excel.
 - **Painel** com gráficos, contas a pagar e receber e evolução do patrimônio.
+> **Por que a consulta ao Serasa, SPC e Banco Central não é automática?** Esses órgãos não oferecem consulta por sistema (API) para pessoa física.
+> - **Serasa, SPC e Boa Vista:** só vendem a integração para empresas, com contrato, CNPJ e cobrança por consulta.
+> - **Registrato (Banco Central):** funciona apenas no site do Banco Central, com login gov.br.
+> - **Open Finance:** exige uma empresa intermediária paga (em geral milhares de reais por mês).
+>
+> Por isso o app traz o caminho oficial e gratuito. O relatório do Registrato é importado direto. As pendências encontradas no Serasa, SPC, Boa Vista ou em protestos você cadastra informando a origem.
+
 - **Segurança e outros**: PIN de acesso, tema claro/escuro, backup e restauração (.json), funcionamento 100% offline.
 
 ---
@@ -59,7 +73,15 @@ Os aplicativos são compilados de graça nos servidores do GitHub. Você não pr
 3. Toque em **Instalar**. Se aparecer o aviso do Play Protect, escolha **"Instalar assim mesmo"**. Ele aparece porque o app não veio da Play Store.
 
 ### Instalar no Windows
-Execute o `FinancasPessoais-Instalador-1.0.N.exe`. Se aparecer **"O Windows protegeu o computador"**, clique em **Mais informações → Executar assim mesmo**. O aviso aparece porque o app não tem certificado comercial de assinatura, que é pago.
+Há duas opções:
+- **Instalador** (`FinancasPessoais-Instalador-1.0.N.exe`): instala em poucos segundos, sem perguntas, e cria atalhos na área de trabalho e no menu Iniciar. Para atualizar, basta executar o instalador da versão nova.
+- **Portátil** (`FinancasPessoais-Portatil-1.0.N.exe`): roda sem instalar.
+
+As duas usam a **mesma pasta de dados** (`%APPDATA%\Finanças Pessoais`), então dá para trocar de uma para a outra sem perder nada. Não abra as duas ao mesmo tempo: a segunda apenas traz a primeira para a frente.
+
+Se aparecer **"O Windows protegeu o computador"**, clique em **Mais informações → Executar assim mesmo**. O aviso aparece porque o app não tem certificado comercial de assinatura, que é pago. Se algo falhar, os detalhes ficam em `%APPDATA%\Finanças Pessoais\registro.txt`.
+
+Cada versão é **testada automaticamente** num Windows do GitHub antes de ser publicada: o processo instala, abre o app, confere a tela, testa a versão portátil e desinstala.
 
 ### Versão web (opcional)
 O workflow pode publicar a pasta `www` no **GitHub Pages** (exige repositório público ou plano pago). Para ativar: em **Settings → Pages**, escolha *Source: GitHub Actions*; depois, em **Settings → Secrets and variables → Actions → Variables**, crie `PUBLICAR_WEB` com valor `true`. O endereço aparece em Settings → Pages. Por ele, dá para **instalar como app** pelo Chrome/Edge, inclusive no celular.
@@ -113,6 +135,7 @@ www/                 interface (HTML/CSS/JS puro, sem build), usada pelos 3 apps
   js/store.js        banco local (IndexedDB) com exclusão lógica e marcação de pendências de envio
   js/sync.js         sincronização via API REST do Supabase ("último a salvar vence")
   js/finance.js      regras: saldos, parcelas, faturas, orçamentos, categorização
+  js/debts.js        endividamento: indicadores, plano de quitação, leitura do Registrato (SCR)
   js/importers.js    OFX, CSV, Excel, PDF e texto
   js/reports.js      relatórios → tela, PDF (jsPDF), Excel (SheetJS), CSV
   vendor/            bibliotecas locais (funciona offline)

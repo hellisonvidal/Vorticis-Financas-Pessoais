@@ -6,7 +6,7 @@
   "scripts": {
     "web": "npx --yes http-server www -p 8080 -c-1",
     "android:init": "npx cap add android",
-    "android:icons": "npx @capacitor/assets generate --android --iconBackgroundColor '#0f766e' --iconBackgroundColorDark '#0f766e' --splashBackgroundColor '#0f766e' --splashBackgroundColorDark '#0b1220'",
+    "android:icons": "npx @capacitor/assets generate --android --iconBackgroundColor '#6d4aed' --iconBackgroundColorDark '#6d4aed' --splashBackgroundColor '#4f46e5' --splashBackgroundColorDark '#0a0e1a'",
     "android:sync": "npx cap sync android",
     "android:apk": "cd android && ./gradlew assembleDebug"
   },

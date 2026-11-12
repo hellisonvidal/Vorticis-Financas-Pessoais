@@ -19,18 +19,34 @@
     "appId": "br.com.financaspessoais.app",
     "productName": "Finanças Pessoais",
     "executableName": "FinancasPessoais",
-    "directories": { "output": "dist" },
-    "files": ["main.js", "icon.ico", "www/**/*"],
-    "win": { "icon": "icon.ico", "target": ["nsis", "portable"] },
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "icon.ico",
+      "www/**/*"
+    ],
+    "win": {
+      "icon": "icon.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
     "nsis": {
-      "oneClick": false,
+      "oneClick": true,
       "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
+      "runAfterFinish": true,
       "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
       "shortcutName": "Finanças Pessoais",
+      "uninstallDisplayName": "Finanças Pessoais",
+      "deleteAppDataOnUninstall": false,
       "artifactName": "FinancasPessoais-Instalador-${version}.${ext}"
     },
-    "portable": { "artifactName": "FinancasPessoais-Portatil-${version}.${ext}" }
+    "portable": {
+      "artifactName": "FinancasPessoais-Portatil-${version}.${ext}"
+    }
   }
 }

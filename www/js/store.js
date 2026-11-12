@@ -4,7 +4,7 @@
 'use strict';
 
 const Store = (() => {
-  const COLLECTIONS = ['accounts', 'categories', 'transactions', 'budgets', 'rules', 'goals'];
+  const COLLECTIONS = ['accounts', 'categories', 'transactions', 'budgets', 'rules', 'goals', 'debts'];
   const SEED_TS = '2000-01-01T00:00:00.000Z'; // registros padrão perdem para qualquer edição real
   const DB_NAME = 'financas-pessoais';
   let idb = null;

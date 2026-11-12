@@ -1,5 +1,13 @@
 'use strict';
 /* Painel: visão geral do mês */
+function spark(nw) {
+  if (nw.length < 2) return '';
+  const vals = nw.map((p) => p.value); const max = Math.max(...vals), min = Math.min(...vals), rng = max - min || 1;
+  const pts = vals.map((v, i) => `${(i / (vals.length - 1) * 300).toFixed(1)},${(52 - (v - min) / rng * 44).toFixed(1)}`);
+  const d = 'M' + pts.join(' L');
+  const delta = vals[vals.length - 1] - vals[0];
+  return `<div class="spark"><small>Patrimônio em 12 meses: ${delta >= 0 ? '+' : ''}${U.money(delta)}</small><svg viewBox="0 0 300 56" preserveAspectRatio="none" aria-hidden="true"><path d="${d} L300,56 L0,56 Z" fill="rgba(255,255,255,.16)"/><path d="${d}" fill="none" stroke="#fff" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg></div>`;
+}
 Views.painel = {
   title: 'Painel',
   render() {
@@ -7,7 +15,7 @@ Views.painel = {
     const accs = F.accounts();
     if (!accs.length) {
       return `<div class="card" style="max-width:640px;margin:24px auto;text-align:center;padding:32px">
-        <img src="icons/icon-192.png" width="72" height="72" alt="" style="border-radius:16px">
+        <img src="icons/icon-192.png" width="80" height="80" alt="" style="border-radius:20px;box-shadow:0 14px 30px -10px rgba(79,70,229,.6)">
         <h2 style="margin:14px 0 6px">Bem-vindo(a) ao Finanças Pessoais</h2>
         <p class="muted">Comece cadastrando suas contas bancárias, carteira e cartões de crédito. Depois lance receitas e despesas ou importe extratos do seu banco (OFX, CSV, Excel ou PDF).</p>
         <div class="row" style="justify-content:center;margin-top:16px"><button class="btn primary" data-a="newacc">${UI.icon('plus')}Criar primeira conta</button><button class="btn" data-a="sample">Ver com dados de exemplo</button></div>
@@ -24,18 +32,32 @@ Views.painel = {
     const hoje = U.today();
     const budgets = F.budgetStatus(ym).slice(0, 6);
     const despCats = s.cats.filter((c) => c.type === 'despesa');
+    const debt = Debts.overview();
 
     return `
-    <div class="row between" style="margin-bottom:14px">${monthNav(ym)}<span class="small muted">Hoje: ${U.fmtDate(hoje)}</span></div>
-    <div class="kpis">
-      <div class="kpi"><span>Saldo atual (efetivado)</span><b class="money ${UI.moneyClass(tot.atual)}">${U.money(tot.atual)}</b><small>soma das contas</small></div>
-      <div class="kpi"><span>Saldo previsto em ${U.fmtDate(U.monthEnd(ym))}</span><b class="money ${UI.moneyClass(tot.previsto)}">${U.money(tot.previsto)}</b><small>inclui pendentes</small></div>
-      <div class="kpi"><span>Receitas do mês</span><b class="money pos">${U.money(s.receitas)}</b><small>${pendRec ? U.money(pendRec) + ' a receber' : 'nada pendente'}</small></div>
-      <div class="kpi"><span>Despesas do mês</span><b class="money neg">${U.money(s.despesas)}</b><small>${pendDesp ? U.money(pendDesp) + ' a pagar' : 'nada pendente'}</small></div>
+    <div class="row between" style="margin-bottom:16px">${monthNav(ym)}<span class="small muted">Hoje: ${U.fmtDate(hoje)}</span></div>
+    <div class="hero-row">
+      <div class="hero">
+        <span class="lbl">Saldo atual em todas as contas</span>
+        <span class="big money">${U.money(tot.atual)}</span>
+        <div class="pills">
+          <div class="pill"><small>Previsto em ${U.fmtDate(U.monthEnd(ym))}</small><b class="money">${U.money(tot.previsto)}</b></div>
+          <div class="pill"><small>Resultado do mês</small><b class="money">${s.resultado >= 0 ? '+' : ''}${U.money(s.resultado)}</b></div>
+          ${tot.invest ? `<div class="pill"><small>Investimentos</small><b class="money">${U.money(tot.invest)}</b></div>` : ''}
+        </div>
+        ${spark(nw)}
+      </div>
+      <div class="kpis">
+        <div class="kpi has-ic t-pos"><div class="kic">${UI.icon('up')}</div><span>Receitas do mês</span><b class="money pos">${U.money(s.receitas)}</b><small>${pendRec ? U.money(pendRec) + ' a receber' : 'nada pendente'}</small></div>
+        <div class="kpi has-ic t-neg"><div class="kic">${UI.icon('down')}</div><span>Despesas do mês</span><b class="money neg">${U.money(s.despesas)}</b><small>${pendDesp ? U.money(pendDesp) + ' a pagar' : 'nada pendente'}</small></div>
+        <div class="kpi has-ic"><div class="kic">${UI.icon('trend')}</div><span>Taxa de poupança</span><b class="${s.resultado >= 0 ? 'pos' : 'neg'}">${s.receitas ? (s.resultado / s.receitas * 100).toFixed(1).replace('.', ',') + '%' : '—'}</b><small>do que entrou no mês</small></div>
+        ${debt.count ? `<a class="kpi has-ic t-warn" href="#/dividas" style="color:inherit;text-decoration:none"><div class="kic">${UI.icon('dividas')}</div><span>Dívidas</span><b class="money">${U.money(debt.total)}</b><small>${debt.ratio !== null ? (debt.ratio * 100).toFixed(0) + '% da renda em parcelas' : debt.count + ' cadastradas'}</small></a>`
+          : `<div class="kpi has-ic"><div class="kic">${UI.icon('card')}</div><span>Cartões de crédito</span><b class="money ${UI.moneyClass(tot.cartoes)}">${U.money(tot.cartoes)}</b><small>saldo das faturas</small></div>`}
+      </div>
     </div>
     <div class="grid g2">
       <div class="card"><div class="row between"><h3>Contas</h3><a href="#/contas" class="small">ver todas</a></div>
-        <ul class="mini">${accs.map((a) => { const b = F.balance(a.id); return `<li style="cursor:pointer" data-acc="${a.id}"><i class="dot" style="background:${U.esc(a.color || '#0f766e')}"></i><span>${U.esc(a.name)} <small class="muted">${F.ACCOUNT_TYPES[a.type] || ''}</small></span><b class="money ${UI.moneyClass(b)}">${U.money(b)}</b></li>`; }).join('')}</ul>
+        <ul class="mini">${accs.map((a) => { const b = F.balance(a.id); return `<li style="cursor:pointer" data-acc="${a.id}"><i class="av" style="background:${U.esc(a.color || '#4f46e5')}">${a.type === 'cartao' ? UI.icon('card') : UI.initials(a.name)}</i><span><b style="font-weight:600">${U.esc(a.name)}</b><br><small class="muted">${F.ACCOUNT_TYPES[a.type] || ''}</small></span><b class="money ${UI.moneyClass(b)}">${U.money(b)}</b></li>`; }).join('')}</ul>
       </div>
       <div class="card"><h3>Despesas por categoria — ${U.fmtMonth(ym)}</h3>${Charts.donut(despCats, { centerLabel: 'Despesas' })}</div>
       <div class="card"><h3>Receitas × despesas (6 meses)</h3>${Charts.bars(ms.map((m) => U.fmtMonthShort(m.ym)), [{ name: 'Receitas', color: getComputedStyle(document.documentElement).getPropertyValue('--pos').trim() || '#16a34a', values: ms.map((m) => m.receitas) }, { name: 'Despesas', color: getComputedStyle(document.documentElement).getPropertyValue('--neg').trim() || '#dc2626', values: ms.map((m) => m.despesas) }])}</div>

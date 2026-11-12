@@ -13,6 +13,7 @@ const Reports = (() => {
     orcamento: { name: 'Orçamento × realizado', needs: ['month'] },
     saldos: { name: 'Saldos das contas', needs: ['date'] },
     cartao: { name: 'Faturas de cartão', needs: ['cardRequired'] },
+    dividas: { name: 'Endividamento e plano de quitação', needs: [] },
   };
   const M = 'money', D = 'date', P = 'pct';
   const col = (label, type, align) => ({ label, type, align: align || (type === M || type === P ? 'right' : 'left') });
@@ -132,6 +133,19 @@ const Reports = (() => {
       const cur = inv.find((i) => i.ym === (p.month || F.invoiceMonth(acc, U.today())));
       if (cur) R.sections.push({ kind: 'table', title: 'Itens da fatura de ' + U.fmtMonth(cur.ym), columns: [col('Data', D), col('Descrição'), col('Categoria'), col('Valor', M)], rows: cur.itens.sort((a, b) => a.date.localeCompare(b.date)).map((t) => [t.date, t.description, t.type === 'transferencia' ? 'Pagamento' : F.catName(t.category_id), t.type === 'receita' || (t.type === 'transferencia' && t.to_account_id === acc.id) ? -t.amount : t.amount]), foot: ['', 'Total da fatura', '', cur.total] });
     }
+    if (type === 'dividas') {
+      const o = Debts.overview();
+      R.subtitle = 'Posição em ' + U.fmtDate(U.today());
+      R.orientation = 'landscape';
+      R.sections.push({ kind: 'kpis', items: [{ label: 'Total em dívidas', value: o.total, cls: 'neg' }, { label: 'Parcelas por mês', value: o.monthly }, { label: 'Em atraso', value: o.overdue, cls: o.overdue ? 'neg' : '' },
+        { label: 'Comprometimento da renda', text: o.ratio === null ? '—' : (o.ratio * 100).toFixed(1).replace('.', ',') + '%' }] });
+      const rows = o.debts.map((d) => [d.name, d.creditor || '', Debts.KINDS[d.kind] || '', Debts.STATUS[d.status] || '', d.balance || 0, d.overdue || 0, d.installment || 0, d.rate ? d.rate.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + '%' : '', d.remaining || '', Debts.SOURCES[d.source] || ''])
+        .concat(o.cards.map((c) => [c.name, c.creditor || '', 'Cartão de crédito (fatura)', 'Automático', c.balance, 0, 0, '', '', 'Contas e cartões']));
+      R.sections.push({ kind: 'table', title: 'Dívidas em aberto', columns: [col('Dívida'), col('Credor'), col('Tipo'), col('Situação'), col('Saldo devedor', M), col('Vencido', M), col('Parcela', M), col('Juros a.m.', 'text', 'right'), col('Restam', 'int', 'right'), col('Origem')], rows,
+        foot: ['Total', '', '', '', o.total, o.overdue, o.monthly, '', '', ''] });
+      const plans = [['minimo', 'Só as parcelas'], ['avalanche', 'Maiores juros primeiro'], ['bolaneve', 'Menores saldos primeiro']].map(([k, n]) => { const r = Debts.simulate(o.all, { strategy: k, extra: 0 }); return [n, r.feasible ? r.months : 'não quita', r.feasible ? U.fmtMonth(U.addMonthYM(U.monthOf(U.today()), r.months)) : '—', r.interest, r.budget]; });
+      R.sections.push({ kind: 'table', title: 'Simulação de quitação (sem valor extra)', columns: [col('Estratégia'), col('Meses', 'int', 'right'), col('Livre em'), col('Juros pagos', M), col('Pagamento mensal', M)], rows: plans });
+    }
     return R;
   }
 
@@ -174,7 +188,7 @@ const Reports = (() => {
     const doc = new jsPDF({ orientation: R.orientation, unit: 'mm', format: 'a4' });
     const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
     const owner = Store.getMeta('owner_name') || '';
-    doc.setFillColor(15, 118, 110); doc.rect(0, 0, W, 22, 'F');
+    doc.setFillColor(79, 70, 229); doc.rect(0, 0, W, 22, 'F');
     doc.setTextColor(255); doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.text(R.title, 12, 10);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.text([R.subtitle, owner].filter(Boolean).join('   •   '), 12, 17);
     doc.setTextColor(30); let y = 30;
@@ -216,7 +230,7 @@ const Reports = (() => {
           body: s.rows.length ? s.rows.map((r) => r.map((v, i) => fmtCell(v, s.columns[i]))) : [[{ content: 'Nenhum dado no período.', colSpan: s.columns.length }]],
           foot: s.foot && s.rows.length ? [s.foot.map((v, i) => fmtCell(v, s.columns[i]))] : undefined,
           styles: { fontSize: s.columns.length > 10 ? 6.5 : 8.5, cellPadding: 1.6, overflow: 'linebreak' },
-          headStyles: { fillColor: [15, 118, 110], textColor: 255, fontStyle: 'bold' },
+          headStyles: { fillColor: [79, 70, 229], textColor: 255, fontStyle: 'bold' },
           footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' },
           alternateRowStyles: { fillColor: [248, 250, 252] },
           columnStyles: Object.fromEntries(s.columns.map((c, i) => [i, { halign: c.align }])),

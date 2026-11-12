@@ -8,7 +8,7 @@ name: Gerar aplicativos
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, 'teste/**']
     tags: ['v*']
   workflow_dispatch:
 
@@ -55,6 +55,10 @@ jobs:
           sed -i "s/versionName \"1.0\"/versionName \"1.0.${{ github.run_number }}\"/" android/app/build.gradle
           grep -E "versionCode|versionName" android/app/build.gradle
 
+      - name: Número da versão na interface
+        shell: bash
+        run: sed -i "s/const VERSION = '[^']*'/const VERSION = '1.0.${{ github.run_number }}'/" www/js/views/config.js && grep -n "const VERSION" www/js/views/config.js
+
       - name: Copiar interface para o Android
         run: npx cap sync android
 
@@ -87,6 +91,10 @@ jobs:
         with:
           node-version: 22
 
+      - name: Número da versão na interface
+        shell: bash
+        run: sed -i "s/const VERSION = '[^']*'/const VERSION = '1.0.${{ github.run_number }}'/" www/js/views/config.js && grep -n "const VERSION" www/js/views/config.js
+
       - name: Instalar dependências
         working-directory: desktop
         run: npm install --no-audit --no-fund
@@ -98,6 +106,10 @@ jobs:
         run: |
           npm version 1.0.${{ github.run_number }} --no-git-tag-version --allow-same-version
           npm run dist
+
+      - name: Testar instalador e versão portátil
+        shell: pwsh
+        run: ./.github/testes/testar-windows.ps1
 
       - uses: actions/upload-artifact@v4
         with:
@@ -130,6 +142,8 @@ jobs:
   release:
     name: Publicar versão (release com .exe e .apk)
     needs: [android, windows]
+    # ramos "teste/..." só compilam e testam, sem publicar versão
+    if: ${{ !startsWith(github.ref, 'refs/heads/teste/') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4

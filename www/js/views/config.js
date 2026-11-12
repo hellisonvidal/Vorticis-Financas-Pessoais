@@ -2,7 +2,7 @@
 /* Configurações: sincronização, backup, segurança, aparência e dados */
 Views.config = (() => {
   const { $, $$, icon } = UI;
-  const VERSION = '1.0.0';
+  const VERSION = '1.1.0'; // substituída pelo número da compilação no GitHub
   function render() {
     const c = Sync.cfg(); const s = Sync.session(); const st = Sync.state;
     const last = Store.getMeta('sb_last');
@@ -133,6 +133,7 @@ Views.config = (() => {
       await Store.removeMany('transactions', F.txs().filter((t) => t.sample || accs.includes(t.account_id) || accs.includes(t.to_account_id)).map((t) => t.id));
       await Store.removeMany('goals', Store.all('goals').filter((g) => g.sample || accs.includes(g.account_id)).map((g) => g.id));
       await Store.removeMany('budgets', Store.all('budgets').filter((b) => b.sample).map((b) => b.id));
+      await Store.removeMany('debts', Store.all('debts').filter((d) => d.sample).map((d) => d.id));
       await Store.removeMany('accounts', accs);
       UI.toast('Dados de exemplo removidos', 'ok'); App.render();
     });

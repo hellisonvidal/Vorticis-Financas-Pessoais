@@ -89,6 +89,9 @@ const Sync = (() => {
 
   async function pull() {
     const s = session();
+    // nova versão com coleções novas: baixa tudo de novo uma vez (versões antigas ignoravam o que não conheciam)
+    const cols = Store.COLLECTIONS.join(',');
+    if (Store.getMeta('sb_cols') !== cols) { await Store.setMeta('sb_cursor', null); await Store.setMeta('sb_cols', cols); }
     let cursor = Store.getMeta('sb_cursor');
     // pequena sobreposição para não perder gravações concorrentes; aplicar duas vezes é inofensivo
     const since = cursor ? new Date(Date.parse(cursor) - 120000).toISOString() : null;

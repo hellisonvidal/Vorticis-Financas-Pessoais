@@ -52,6 +52,11 @@ const Sample = (() => {
       { id: U.uuid(), name: 'Reserva de emergência', target: 3000000, saved: 0, account_id: A.poup, deadline: U.addMonths(hoje, 18), color: '#2563eb', sample: true },
       { id: U.uuid(), name: 'Viagem de férias', target: 800000, saved: 210000, deadline: U.addMonths(hoje, 8), color: '#ec4899', sample: true },
     ]);
+    await Store.upsertMany('debts', [
+      { id: U.uuid(), name: 'Financiamento do carro', creditor: 'Banco Exemplo', kind: 'financiamento_veiculo', balance: 2840000, installment: 98000, remaining: 38, rate: 1.69, due_day: 15, status: 'em_dia', overdue: 0, source: 'manual', balance_date: hoje, sample: true },
+      { id: U.uuid(), name: 'Empréstimo pessoal', creditor: 'Financeira Exemplo', kind: 'credito_pessoal', balance: 420000, installment: 41000, remaining: 12, rate: 5.9, due_day: 5, status: 'em_dia', overdue: 0, source: 'manual', balance_date: hoje, sample: true },
+      { id: U.uuid(), name: 'Loja de departamentos', creditor: 'Loja Exemplo', kind: 'conta_atrasada', balance: 68000, installment: 0, rate: 8, status: 'atrasada', overdue: 68000, source: 'serasa', balance_date: hoje, sample: true },
+    ]);
   }
   return { load };
 })();

@@ -5,8 +5,9 @@ const Views = {};
 const App = (() => {
   const { $, $$, icon } = UI;
   const NAV = [
-    ['painel', 'Painel'], ['lancamentos', 'Lançamentos'], ['contas', 'Contas e cartões'], ['orcamentos', 'Orçamentos'], ['metas', 'Metas'],
-    ['importar', 'Importar extrato'], ['relatorios', 'Relatórios'], ['categorias', 'Categorias e regras'], ['config', 'Configurações'],
+    ['§', 'Visão geral'], ['painel', 'Painel'], ['lancamentos', 'Lançamentos'], ['contas', 'Contas e cartões'],
+    ['§', 'Planejamento'], ['orcamentos', 'Orçamentos'], ['metas', 'Metas'], ['dividas', 'Endividamento'],
+    ['§', 'Ferramentas'], ['importar', 'Importar extrato'], ['relatorios', 'Relatórios'], ['categorias', 'Categorias e regras'], ['config', 'Configurações'],
   ];
   const state = { month: U.monthOf(U.today()), route: 'painel', param: null };
   let installEvt = null;
@@ -46,7 +47,7 @@ const App = (() => {
   let pending = false;
 
   function buildNav() {
-    $('#nav').innerHTML = NAV.map(([r, n]) => `<a href="#/${r}" data-r="${r}">${icon(r)}<span>${n}</span></a>`).join('');
+    $('#nav').innerHTML = NAV.map(([r, n]) => (r === '§' ? `<div class="navsec">${n}</div>` : `<a href="#/${r}" data-r="${r}">${icon(r)}<span>${n}</span></a>`)).join('');
     $('#bottom').innerHTML = [['painel', 'Painel'], ['lancamentos', 'Lançamentos']].map(([r, n]) => `<a href="#/${r}" data-r="${r}">${icon(r)}<span>${n}</span></a>`).join('')
       + `<a href="#" class="fab" id="fab" aria-label="Novo lançamento"><span class="f">${icon('plus')}</span></a>`
       + [['contas', 'Contas'], ['relatorios', 'Relatórios']].map(([r, n]) => `<a href="#/${r}" data-r="${r}">${icon(r)}<span>${n}</span></a>`).join('');
@@ -95,6 +96,7 @@ const App = (() => {
     await Store.init();
     applyTheme();
     await F.seedIfEmpty();
+    await Debts.ensureCategory();
     buildNav();
     await lockIfNeeded();
     window.addEventListener('hashchange', render);
