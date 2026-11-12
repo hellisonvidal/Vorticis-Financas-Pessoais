@@ -1,0 +1,24 @@
+{
+  "name": "financas-pessoais",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Controle de finanças pessoais (Windows, Android e navegador)",
+  "scripts": {
+    "web": "npx --yes http-server www -p 8080 -c-1",
+    "android:init": "npx cap add android",
+    "android:icons": "npx @capacitor/assets generate --android --iconBackgroundColor '#0f766e' --iconBackgroundColorDark '#0f766e' --splashBackgroundColor '#0f766e' --splashBackgroundColorDark '#0b1220'",
+    "android:sync": "npx cap sync android",
+    "android:apk": "cd android && ./gradlew assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.6.0",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/core": "8.6.0",
+    "@capacitor/filesystem": "8.1.5",
+    "@capacitor/share": "8.0.3"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "3.0.5",
+    "@capacitor/cli": "8.6.0"
+  }
+}

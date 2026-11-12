@@ -1,0 +1,9 @@
+{
+  "appId": "br.com.financaspessoais.app",
+  "appName": "Finanças Pessoais",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#0f766e"
+  }
+}

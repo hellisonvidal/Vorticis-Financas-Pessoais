@@ -1,0 +1,36 @@
+{
+  "name": "financas-pessoais-desktop",
+  "productName": "Finanças Pessoais",
+  "version": "1.0.0",
+  "description": "Controle de finanças pessoais",
+  "author": "Finanças Pessoais",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "prepare-web": "node copy-web.js",
+    "start": "node copy-web.js && electron .",
+    "dist": "node copy-web.js && electron-builder --win nsis portable --x64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "44.9.3",
+    "electron-builder": "26.0.12"
+  },
+  "build": {
+    "appId": "br.com.financaspessoais.app",
+    "productName": "Finanças Pessoais",
+    "executableName": "FinancasPessoais",
+    "directories": { "output": "dist" },
+    "files": ["main.js", "icon.ico", "www/**/*"],
+    "win": { "icon": "icon.ico", "target": ["nsis", "portable"] },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Finanças Pessoais",
+      "artifactName": "FinancasPessoais-Instalador-${version}.${ext}"
+    },
+    "portable": { "artifactName": "FinancasPessoais-Portatil-${version}.${ext}" }
+  }
+}

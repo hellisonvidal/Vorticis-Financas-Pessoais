@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f766e">
+  <meta name="description" content="Controle de finanças pessoais: contas, lançamentos, cartões, orçamentos, importação de extratos e relatórios.">
+  <title>Finanças Pessoais</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <div id="lock" class="lock" hidden>
+    <div class="lockbox">
+      <img src="icons/icon-192.png" alt="" width="64" height="64">
+      <h2>Finanças Pessoais</h2>
+      <p>Digite seu PIN para entrar</p>
+      <input id="lockpin" type="password" inputmode="numeric" autocomplete="off" maxlength="8" aria-label="PIN">
+      <button id="lockbtn" class="btn primary">Entrar</button>
+      <p id="lockerr" class="neg small"></p>
+    </div>
+  </div>
+
+  <aside id="side" class="side">
+    <div class="brand"><img src="icons/icon-192.png" alt="" width="32" height="32"><span>Finanças<br><small>Pessoais</small></span></div>
+    <nav id="nav"></nav>
+    <div class="side-foot"><button id="syncbadge" class="syncbadge" title="Sincronização"><i></i><span>Offline</span></button></div>
+  </aside>
+  <div id="scrim" class="scrim"></div>
+
+  <div class="main">
+    <header class="top">
+      <button id="menubtn" class="iconbtn only-mobile" aria-label="Menu"><svg class="i" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+      <h1 id="title">Painel</h1>
+      <div class="top-actions">
+        <button id="syncbadge2" class="syncbadge only-mobile" title="Sincronização"><i></i></button>
+        <button id="quickadd" class="btn primary"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span class="hide-sm">Novo lançamento</span></button>
+      </div>
+    </header>
+    <main id="view" class="view" tabindex="-1"></main>
+  </div>
+
+  <nav id="bottom" class="bottom only-mobile"></nav>
+  <div id="modals"></div>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <script src="config.js"></script>
+  <script src="vendor/xlsx.full.min.js"></script>
+  <script src="vendor/jspdf.umd.min.js"></script>
+  <script src="vendor/jspdf.plugin.autotable.min.js"></script>
+  <script src="js/util.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/sync.js"></script>
+  <script src="js/finance.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/importers.js"></script>
+  <script src="js/reports.js"></script>
+  <script src="js/sample.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/views/painel.js"></script>
+  <script src="js/views/lancamentos.js"></script>
+  <script src="js/views/contas.js"></script>
+  <script src="js/views/cadastros.js"></script>
+  <script src="js/views/importar.js"></script>
+  <script src="js/views/relatorios.js"></script>
+  <script src="js/views/config.js"></script>
+</body>
+</html>
