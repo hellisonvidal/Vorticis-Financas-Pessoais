@@ -51,7 +51,7 @@ Os aplicativos são compilados de graça nos servidores do GitHub. Você não pr
    - `android-apk`: tem o **FinancasPessoais.apk**.
 
 > **Atualizações:** a cada novo envio (push), novos arquivos são gerados. O APK usa sempre a mesma assinatura (pasta `android-signing`), então você instala por cima da versão anterior **sem perder os dados**.
-> Para publicar uma versão com os arquivos anexados, crie uma tag como `v1.0.1`. Eles aparecem em **Releases**.
+> Cada compilação também publica automaticamente uma **versão** (ex.: `v1.0.3`) com os arquivos anexados, na seção **Releases** do repositório. É o jeito mais fácil de baixar.
 
 ### Instalar no Android
 1. Copie o `FinancasPessoais.apk` para o celular (pelo Google Drive, por cabo ou pelo WhatsApp para você mesmo).
@@ -62,7 +62,7 @@ Os aplicativos são compilados de graça nos servidores do GitHub. Você não pr
 Execute o `FinancasPessoais-Instalador-1.0.0.exe`. Se aparecer **"O Windows protegeu o computador"**, clique em **Mais informações → Executar assim mesmo**. O aviso aparece porque o app não tem certificado comercial de assinatura, que é pago.
 
 ### Versão web (opcional)
-O workflow também tenta publicar a pasta `www` no **GitHub Pages**. Isso exige um repositório público ou um plano pago. Se funcionar, o endereço aparece em Settings → Pages. Por ele, dá para **instalar como app** pelo Chrome/Edge, inclusive no celular.
+O workflow pode publicar a pasta `www` no **GitHub Pages** (exige repositório público ou plano pago). Para ativar: em **Settings → Pages**, escolha *Source: GitHub Actions*; depois, em **Settings → Secrets and variables → Actions → Variables**, crie `PUBLICAR_WEB` com valor `true`. O endereço aparece em Settings → Pages. Por ele, dá para **instalar como app** pelo Chrome/Edge, inclusive no celular.
 
 ---
 
