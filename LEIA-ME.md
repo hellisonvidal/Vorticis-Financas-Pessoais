@@ -4,7 +4,7 @@ Sistema completo de controle financeiro pessoal. **Uma única base de código** 
 
 | Plataforma | Arquivo | Como é gerado |
 |---|---|---|
-| Windows | `FinancasPessoais-Instalador-1.0.0.exe` e `FinancasPessoais-Portatil-1.0.0.exe` | Electron (automático no GitHub) |
+| Windows | `FinancasPessoais-Instalador-1.0.N.exe` e `FinancasPessoais-Portatil-1.0.N.exe` | Electron (automático no GitHub) |
 | Android | `FinancasPessoais.apk` | Capacitor (automático no GitHub) |
 | Navegador / PWA | pasta `www` | funciona direto, até offline |
 
@@ -59,7 +59,7 @@ Os aplicativos são compilados de graça nos servidores do GitHub. Você não pr
 3. Toque em **Instalar**. Se aparecer o aviso do Play Protect, escolha **"Instalar assim mesmo"**. Ele aparece porque o app não veio da Play Store.
 
 ### Instalar no Windows
-Execute o `FinancasPessoais-Instalador-1.0.0.exe`. Se aparecer **"O Windows protegeu o computador"**, clique em **Mais informações → Executar assim mesmo**. O aviso aparece porque o app não tem certificado comercial de assinatura, que é pago.
+Execute o `FinancasPessoais-Instalador-1.0.N.exe`. Se aparecer **"O Windows protegeu o computador"**, clique em **Mais informações → Executar assim mesmo**. O aviso aparece porque o app não tem certificado comercial de assinatura, que é pago.
 
 ### Versão web (opcional)
 O workflow pode publicar a pasta `www` no **GitHub Pages** (exige repositório público ou plano pago). Para ativar: em **Settings → Pages**, escolha *Source: GitHub Actions*; depois, em **Settings → Secrets and variables → Actions → Variables**, crie `PUBLICAR_WEB` com valor `true`. O endereço aparece em Settings → Pages. Por ele, dá para **instalar como app** pelo Chrome/Edge, inclusive no celular.
