@@ -7,8 +7,21 @@ const OpenFinance = (() => {
   const DEFAULT_BASE = 'https://api.pluggy.ai';
   const base = () => (Store.getMeta('pluggy_base') || DEFAULT_BASE).replace(/\/+$/, '');
   const cfg = () => ({ clientId: Store.getMeta('pluggy_client_id') || '', clientSecret: Store.getMeta('pluggy_client_secret') || '' });
-  const configured = () => { const c = cfg(); return !!(c.clientId && c.clientSecret); };
-  const items = () => Store.getMeta('pluggy_items', []);
+  const directConfigured = () => { const c = cfg(); return !!(c.clientId && c.clientSecret); };
+  /** 'nuvem' = pela função do Supabase (login do app, sem chaves no aparelho); 'direto' = chaves da Pluggy neste aparelho */
+  const mode = () => (Store.getMeta('pluggy_mode') === 'direto' ? 'direto' : 'nuvem');
+  const cloud = () => mode() === 'nuvem';
+  const configured = () => (cloud() ? Sync.loggedIn() : directConfigured());
+  let cloudItems = [];
+  const items = () => (cloud() ? cloudItems : Store.getMeta('pluggy_items', []));
+  async function call(action, body) {
+    try { return await Sync.fn('pluggy', { action, ...(body || {}) }); }
+    catch (e) {
+      if (e.offline) throw new Error('Sem conexão com o servidor. Verifique a internet.');
+      if (e.status === 404 && /function|not found/i.test(String(e.raw || e.message))) throw new Error('A função "pluggy" ainda não foi publicada no seu Supabase. Veja a seção Open Finance do LEIA-ME.');
+      throw e;
+    }
+  }
   const links = () => Store.getMeta('pluggy_links', {});
   let apiKey = null, apiKeyExp = 0;
 
@@ -74,11 +87,12 @@ const OpenFinance = (() => {
   }
   const safeId = (id) => { if (!/^[A-Za-z0-9-]{8,64}$/.test(String(id || ''))) throw new Error('ID inválido: ' + id); return id; };
 
-  const test = async () => { apiKey = null; await key(); return true; };
-  const fetchItem = (id) => get('/items/' + safeId(id));
-  async function fetchAccounts(itemId) { const r = await get('/accounts', { itemId: safeId(itemId) }); return (r && r.results) || []; }
-  async function fetchLoans(itemId) { const r = await get('/loans', { itemId: safeId(itemId) }); return (r && r.results) || []; }
+  const test = async () => { if (cloud()) return call('status'); apiKey = null; await key(); return true; };
+  const fetchItem = (id) => (cloud() ? call('item', { id: safeId(id) }) : get('/items/' + safeId(id)));
+  async function fetchAccounts(itemId) { const r = cloud() ? await call('accounts', { itemId: safeId(itemId) }) : await get('/accounts', { itemId: safeId(itemId) }); return (r && r.results) || []; }
+  async function fetchLoans(itemId) { const r = cloud() ? await call('loans', { itemId: safeId(itemId) }) : await get('/loans', { itemId: safeId(itemId) }); return (r && r.results) || []; }
   async function refreshItem(id) {
+    if (cloud()) return call('refresh', { id: safeId(id) });
     try { return await http('PATCH', base() + '/items/' + safeId(id), { 'X-API-KEY': await key() }, {}); }
     catch (e) { if (e.status >= 400 && e.status < 500 && e.status !== 429) throw new Error('A Pluggy não permitiu atualizar esta conexão pelo app. Atualize em meu.pluggy.ai (ela também atualiza sozinha periodicamente).'); throw e; }
   }
@@ -87,7 +101,7 @@ const OpenFinance = (() => {
   async function fetchTransactions(accountId, from) {
     const out = []; let after = null;
     for (let i = 0; i < 200; i++) {
-      const r = await get('/v2/transactions', { accountId: safeId(accountId), dateFrom: from, after });
+      const r = cloud() ? await call('transactions', { accountId: safeId(accountId), dateFrom: from, after }) : await get('/v2/transactions', { accountId: safeId(accountId), dateFrom: from, after });
       out.push(...((r && r.results) || []));
       const next = r && r.next; if (!next) break;
       const q = String(next).includes('?') ? String(next).split('?')[1] : String(next);
@@ -133,16 +147,41 @@ const OpenFinance = (() => {
     return Store.upsert('accounts', rec);
   }
   async function link(pluggyAccId, localId) { const l = { ...links() }; if (localId) l[pluggyAccId] = localId; else delete l[pluggyAccId]; await Store.setMeta('pluggy_links', l); }
+  // ---------- modo nuvem: conexões guardadas no servidor (aparecem em todos os aparelhos) ----------
+  async function loadCloudItems() { const r = await call('items'); cloudItems = (r && r.results) || []; return cloudItems; }
+  async function registerItem(id) { const it = await call('register', { itemId: safeId(id) }); await loadCloudItems(); return it; }
+  /** Abre a tela de login do banco (Pluggy Connect) dentro do app. updateItem = reconectar uma conexão existente */
+  async function connect({ updateItem, onEvent } = {}) {
+    if (typeof PluggyConnect === 'undefined') throw new Error('Componente da Pluggy não carregou.');
+    const { accessToken } = await call('connect-token', updateItem ? { itemId: updateItem } : {});
+    if (!accessToken) throw new Error('O servidor não devolveu o código de conexão.');
+    const dark = document.documentElement.getAttribute('data-theme') === 'dark' || (!document.documentElement.getAttribute('data-theme') && matchMedia('(prefers-color-scheme: dark)').matches);
+    return new Promise((resolve, reject) => {
+      let done = false;
+      const pc = new PluggyConnect({
+        connectToken: accessToken, language: 'pt', theme: dark ? 'dark' : 'light', countries: ['BR'], forceOauthInBrowser: true, allowFullscreen: true,
+        ...(updateItem ? { updateItem } : {}),
+        onSuccess: async ({ item }) => { done = true; try { const r = await registerItem(item.id); resolve({ item: { ...item, ...r } }); } catch (e) { reject(e); } },
+        onError: (e) => { if (!done) { done = true; reject(new Error((e && e.message) || 'Não foi possível conectar o banco.')); } },
+        onClose: () => { if (!done) { done = true; resolve(null); } },
+        onEvent: (ev) => { try { onEvent && onEvent(ev); } catch (e) { /* ignora */ } },
+      });
+      pc.init().catch((e) => { if (!done) { done = true; reject(e); } });
+    });
+  }
+
   async function addItem(id) {
     id = String(id || '').trim(); safeId(id);
+    if (cloud()) { if (items().some((i) => i.id === id)) throw new Error('Esta conexão já foi adicionada.'); const r = await registerItem(id); return { ...r, connector: { name: r.name } }; }
     if (items().some((i) => i.id === id)) throw new Error('Esta conexão já foi adicionada.');
     const it = await fetchItem(id);
     const rec = { id, name: (it.connector && it.connector.name) || 'Banco', status: it.status, lastUpdatedAt: it.lastUpdatedAt || null };
     await Store.setMeta('pluggy_items', [...items(), rec]);
     return it;
   }
-  async function saveItemInfo(it) { await Store.setMeta('pluggy_items', items().map((i) => (i.id === it.id ? { ...i, name: (it.connector && it.connector.name) || i.name, status: it.status, lastUpdatedAt: it.lastUpdatedAt || null } : i))); }
-  async function removeItem(id) {
+  async function saveItemInfo(it) { if (cloud()) { cloudItems = cloudItems.map((i) => (i.id === it.id ? { ...i, status: it.status, lastUpdatedAt: it.lastUpdatedAt || null } : i)); return; } await Store.setMeta('pluggy_items', items().map((i) => (i.id === it.id ? { ...i, name: (it.connector && it.connector.name) || i.name, status: it.status, lastUpdatedAt: it.lastUpdatedAt || null } : i))); }
+  async function removeItem(id, { deleteAtPluggy = false } = {}) {
+    if (cloud()) { await call('unregister', { itemId: safeId(id), deleteAtPluggy }); await loadCloudItems(); return; }
     await Store.setMeta('pluggy_items', items().filter((i) => i.id !== id));
   }
 
@@ -171,6 +210,6 @@ const OpenFinance = (() => {
     return recs.length;
   }
 
-  return { configured, cfg, setConfig, clearAll, items, links, link, addItem, removeItem, saveItemInfo, test, fetchItem, fetchAccounts, fetchTransactions, fetchLoans,
+  return { mode, cloud, directConfigured, loadCloudItems, connect, configured, cfg, setConfig, clearAll, items, links, link, addItem, removeItem, saveItemInfo, test, fetchItem, fetchAccounts, fetchTransactions, fetchLoans,
     refreshItem, rowsFrom, toRow, txDate, accType, accLabel, createLocalAccount, loanToDebt, saveLoans, cents, base };
 })();

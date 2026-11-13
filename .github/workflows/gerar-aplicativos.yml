@@ -75,6 +75,13 @@ jobs:
           sed -i "s/versionName \"1.0\"/versionName \"1.0.${{ github.run_number }}\"/" android/app/build.gradle
           grep -E "versionCode|versionName" android/app/build.gradle
 
+      - name: Servidor pré-configurado no app (se houver secrets do Supabase)
+        shell: bash
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: ./.github/scripts/configurar-app.sh
+
       - name: Número da versão na interface
         shell: bash
         run: sed -i "s/APP_VERSION = '[^']*'/APP_VERSION = '1.0.${{ github.run_number }}'/" www/version.js && cat www/version.js
@@ -111,6 +118,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+
+      - name: Servidor pré-configurado no app (se houver secrets do Supabase)
+        shell: bash
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: ./.github/scripts/configurar-app.sh
 
       - name: Número da versão na interface
         shell: bash

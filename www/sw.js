@@ -1,11 +1,11 @@
 /* Service worker: permite usar o app sem internet (versão web/PWA). */
-const CACHE = 'financas-v1.3.0';
+const CACHE = 'financas-v1.4.0';
 const FILES = [
   './', './index.html', './manifest.webmanifest', './config.js', './version.js', './css/app.css',
   './js/util.js', './js/store.js', './js/sync.js', './js/finance.js', './js/debts.js', './js/openfinance.js', './js/updater.js', './js/charts.js', './js/importers.js', './js/reports.js', './js/sample.js',
   './js/ui.js', './js/app.js', './js/views/painel.js', './js/views/lancamentos.js', './js/views/contas.js', './js/views/cadastros.js',
   './js/views/importar.js', './js/views/relatorios.js', './js/views/dividas.js', './js/views/bancos.js', './js/views/config.js',
-  './vendor/xlsx.full.min.js', './vendor/jspdf.umd.min.js', './vendor/jspdf.plugin.autotable.min.js', './vendor/pdf.min.js', './vendor/pdf.worker.min.js',
+  './vendor/xlsx.full.min.js', './vendor/jspdf.umd.min.js', './vendor/jspdf.plugin.autotable.min.js', './vendor/pluggy-connect.min.js', './vendor/pdf.min.js', './vendor/pdf.worker.min.js',
   './vendor/fonts/inter.woff2', './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-512.png',
 ];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting())); });

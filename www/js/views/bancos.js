@@ -7,42 +7,71 @@ Views.bancos = (() => {
   const STATUS = { UPDATED: ['pos', 'Atualizado'], UPDATING: ['info', 'Atualizando…'], OUTDATED: ['warn', 'Desatualizado'], LOGIN_ERROR: ['neg', 'Precisa reconectar'], WAITING_USER_INPUT: ['warn', 'Aguardando você'], WAITING_USER_ACTION: ['warn', 'Aguardando você'], MERGING: ['info', 'Processando'] };
   const dt = (d) => { if (!d) return '—'; const x = new Date(d); return isNaN(x) ? '—' : x.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }); };
 
+  // estado do servidor (modo nuvem)
+  const srv = { checked: false, loading: false, ok: false, configured: false, canLink: false, err: '' };
+  async function checkServer() {
+    if (srv.loading) return; srv.loading = true;
+    try {
+      const r = await OpenFinance.test(); Object.assign(srv, { ok: true, configured: !!r.configured, canLink: !!r.canLinkExisting, err: '' });
+      if (r.configured) await OpenFinance.loadCloudItems();
+    } catch (e) { Object.assign(srv, { ok: false, err: e.message }); }
+    srv.checked = true; srv.loading = false; App.render();
+  }
+
   function render() {
-    const c = OpenFinance.cfg(); const items = OpenFinance.items();
+    const cloud = OpenFinance.cloud();
     const web = !U.isNative() && !globalThis.desktop;
-    return `
-    <div class="note" style="margin-bottom:18px">${icon('shield')}<div><b>Duas formas de trazer os extratos:</b>
-      <b>1) Open Finance</b> (esta tela): os lançamentos vêm direto do banco, pela Pluggy, no plano gratuito para uso pessoal (Meu Pluggy).
+    const items = OpenFinance.items();
+    const intro = `<div class="note" style="margin-bottom:18px">${icon('shield')}<div><b>Duas formas de trazer os extratos:</b>
+      <b>1) Open Finance</b> (esta tela): conecte o banco uma vez e os lançamentos vêm direto, pela Pluggy (empresa autorizada pelo Banco Central).
       <b>2) Arquivo OFX/CSV/Excel/PDF</b>, em <a href="#/importar">Importar extrato</a>, que funciona sem cadastro em nenhum serviço.
-      Nos dois casos você revisa antes de salvar, e o que já existe não é duplicado.</div></div>
-    ${web ? `<div class="note warn" style="margin-bottom:18px">${icon('alert')}<div>No navegador, a conexão pode ser bloqueada por segurança (CORS). Para o Open Finance, prefira o aplicativo do <b>Windows</b> ou do <b>Android</b>.</div></div>` : ''}
-    <div class="grid g2">
-      <div class="card">
-        <h3>1. Credenciais da Pluggy</h3>
-        <div class="form">
-          <label class="field full"><span>Client ID</span><input class="input" id="pcid" value="${U.esc(c.clientId)}" autocomplete="off" spellcheck="false" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"></label>
-          <label class="field full"><span>Client Secret</span><input class="input" id="pcs" type="password" value="${U.esc(c.clientSecret)}" autocomplete="off" spellcheck="false"></label>
-        </div>
-        <div class="row" style="margin-top:12px"><button class="btn primary" id="psave">${icon('check')}Salvar e testar</button>${OpenFinance.configured() ? `<span class="badge pos">Configurado</span><span class="spacer"></span><button class="btn sm danger" id="pclear">Desconectar</button>` : ''}</div>
-        <p class="small muted" style="margin-bottom:0">As credenciais ficam guardadas <b>somente neste aparelho</b> e não são enviadas para a nuvem de sincronização. Configure em cada aparelho que for usar o Open Finance.</p>
-      </div>
-      <div class="card help">
-        <h3>Como configurar (uma vez)</h3>
-        <ol>
-          <li>Crie sua conta grátis no <a href="https://meu.pluggy.ai" target="_blank" rel="noopener">Meu Pluggy</a> e conecte seus bancos. A autorização é feita no app do próprio banco (Open Finance oficial).</li>
-          <li>No <a href="https://dashboard.pluggy.ai" target="_blank" rel="noopener">painel da Pluggy</a>, com a mesma conta, crie uma aplicação e copie o <b>Client ID</b> e o <b>Client Secret</b>.</li>
-          <li>Copie o <b>ID de cada conexão</b> (chamado de "item") que aparece no Meu Pluggy e adicione abaixo. No plano grátis o app não consegue listar as conexões sozinho.</li>
-          <li>Vincule cada conta do banco a uma conta do app (ou crie uma nova) e clique em <b>Importar lançamentos</b>.</li>
-        </ol>
-        <p class="small muted" style="margin:0">A Pluggy atualiza os dados do banco periodicamente. O consentimento do Open Finance tem validade e precisa ser renovado no Meu Pluggy quando vencer.</p>
-      </div>
-    </div>
-    ${OpenFinance.configured() ? `
-    <div class="card" style="margin-top:18px">
-      <div class="row between"><h3>2. Conexões (bancos)</h3>
+      Nos dois casos você revisa antes de salvar, e o que já existe não é duplicado.</div></div>`;
+    const adv = `<details style="margin-top:18px"${cloud ? '' : ' open'}><summary class="small muted" style="cursor:pointer">Modo avançado: usar minhas próprias chaves da Pluggy neste aparelho</summary>
+      <div class="card" style="margin-top:10px">
+        <label class="check"><input type="checkbox" id="pmode" ${cloud ? '' : 'checked'}> Usar chaves da Pluggy guardadas neste aparelho (em vez do servidor)</label>
+        ${cloud ? '' : `<div class="form" style="margin-top:12px">
+          <label class="field full"><span>Client ID</span><input class="input" id="pcid" value="${U.esc(OpenFinance.cfg().clientId)}" autocomplete="off" spellcheck="false"></label>
+          <label class="field full"><span>Client Secret</span><input class="input" id="pcs" type="password" value="${U.esc(OpenFinance.cfg().clientSecret)}" autocomplete="off" spellcheck="false"></label></div>
+          <div class="row" style="margin-top:12px"><button class="btn primary" id="psave">${icon('check')}Salvar e testar</button>${OpenFinance.directConfigured() ? '<span class="badge pos">Configurado</span><span class="spacer"></span><button class="btn sm danger" id="pclear">Apagar chaves</button>' : ''}</div>
+          <p class="small muted">Neste modo as conexões são adicionadas pelo ID (Meu Pluggy) e ficam só neste aparelho.</p>`}
+      </div></details>`;
+
+    if (cloud) {
+      let top;
+      if (!Sync.configured() || !Sync.loggedIn()) {
+        top = `<div class="card" style="text-align:center;padding:28px">${icon('bancos')}<h3 style="margin:10px 0 6px">Entre no app para usar o Open Finance</h3>
+          <p class="muted small" style="max-width:520px;margin:0 auto 14px">O Open Finance usa o mesmo login da sincronização. As chaves da Pluggy ficam guardadas no seu servidor (Supabase), nunca no aparelho.</p>
+          <a class="btn primary" href="#/config">Ir para Configurações → Sincronização</a></div>`;
+      } else if (!srv.checked) {
+        if (!srv.loading) setTimeout(checkServer, 0);
+        top = '<div class="card"><p class="muted">Verificando o servidor…</p></div>';
+      } else if (!srv.ok || !srv.configured) {
+        top = `<div class="card"><h3>${icon('alert')} Servidor do Open Finance ainda não está pronto</h3>
+          <p class="small ${srv.ok ? '' : 'neg'}">${U.esc(srv.ok ? 'A função está publicada, mas as chaves da Pluggy não foram configuradas no servidor.' : srv.err)}</p>
+          <div class="help small"><b>Configuração única (feita uma vez, pelo GitHub):</b><ol>
+            <li>Crie a conta grátis na <a href="https://dashboard.pluggy.ai" target="_blank" rel="noopener">Pluggy</a> e copie o <b>Client ID</b> e o <b>Client Secret</b>.</li>
+            <li>No repositório do GitHub, em <b>Settings → Secrets and variables → Actions</b>, cadastre os secrets listados no LEIA-ME (seção Open Finance).</li>
+            <li>Rode a ação <b>"Configurar servidor (Supabase)"</b> na aba Actions. Ela publica a função e guarda as chaves no seu Supabase.</li></ol></div>
+          <button class="btn" id="precheck">${icon('sync')}Verificar de novo</button></div>`;
+      } else {
+        top = `<div class="card">
+          <div class="row between"><div><h3 style="margin:0">Seus bancos</h3><span class="small muted">Conectado como ${U.esc((Sync.session() || {}).user ? Sync.session().user.email : '')} • as conexões aparecem em todos os seus aparelhos</span></div>
+            <button class="btn primary" id="pconnect">${icon('plus')}Conectar banco</button></div>
+          ${items.length ? items.map(itemCard).join('') : `<div class="empty">Nenhum banco conectado ainda.<br>Toque em <b>Conectar banco</b>, escolha a instituição e autorize no app do seu banco.</div>`}
+          ${srv.canLink ? `<details style="margin-top:10px"><summary class="small muted" style="cursor:pointer">Já conectei um banco no Meu Pluggy: vincular pelo ID</summary>
+            <div class="row" style="margin-top:8px"><input class="input" id="pitem" placeholder="ID da conexão (item)" style="width:320px;max-width:100%" spellcheck="false"><button class="btn" id="padd">${icon('plus')}Vincular</button></div></details>` : ''}
+        </div>`;
+      }
+      return intro + (web ? `<div class="note warn" style="margin-bottom:18px">${icon('alert')}<div>Na versão de navegador a tela do banco pode ser bloqueada. Prefira o aplicativo do <b>Windows</b> ou do <b>Android</b>.</div></div>` : '') + top + adv;
+    }
+
+    // modo avançado (chaves no aparelho)
+    return intro + `${OpenFinance.directConfigured() ? `
+    <div class="card">
+      <div class="row between"><h3>Conexões (bancos)</h3>
         <div class="row"><input class="input" id="pitem" placeholder="ID da conexão (item)" style="width:320px;max-width:100%" spellcheck="false"><button class="btn primary" id="padd">${icon('plus')}Adicionar</button></div></div>
       ${items.length ? items.map(itemCard).join('') : '<p class="empty">Nenhuma conexão adicionada. Cole acima o ID da conexão mostrado no Meu Pluggy.</p>'}
-    </div>` : ''}`;
+    </div>` : ''}` + adv;
   }
 
   function itemCard(it) {
@@ -57,6 +86,7 @@ Views.bancos = (() => {
         <div class="row"><span class="badge ${st[0]}">${st[1]}</span>
           <button class="btn sm" data-load="${it.id}">${icon('sync')}${c.accounts ? 'Recarregar' : 'Carregar contas'}</button>
           <button class="btn sm" data-refresh="${it.id}" title="Pedir ao banco dados novos">Atualizar no banco</button>
+          ${OpenFinance.cloud() ? `<button class="btn sm" data-reconnect="${it.id}" title="Renovar a autorização no banco">Reconectar</button>` : ''}
           <button class="btn sm" data-loans="${it.id}">${icon('dividas')}Empréstimos</button>
           <button class="btn sm ghost danger" data-del="${it.id}" title="Remover conexão">${icon('trash')}</button></div>
       </div>
@@ -143,7 +173,23 @@ Views.bancos = (() => {
   }
 
   function bind(root) {
-    $('#psave', root).onclick = async () => {
+    const pm = $('#pmode', root); if (pm) pm.onchange = async () => { await Store.setMeta('pluggy_mode', pm.checked ? 'direto' : 'nuvem'); Object.keys(cache).forEach((k) => delete cache[k]); srv.checked = false; App.render(); };
+    const rc = $('#precheck', root); if (rc) rc.onclick = () => { srv.checked = false; App.render(); };
+    const pc = $('#pconnect', root);
+    if (pc) pc.onclick = async () => {
+      pc.disabled = true;
+      try {
+        const r = await OpenFinance.connect();
+        if (r && r.item) { UI.toast(`Banco conectado: ${(r.item.connector && r.item.connector.name) || r.item.name || ''}. Carregando contas…`, 'ok', 5000); await load(r.item.id); }
+      } catch (e) { UI.toast(e.message, 'error', 8000); }
+      finally { pc.disabled = false; App.render(); }
+    };
+    $$('[data-reconnect]', root).forEach((b) => (b.onclick = async () => {
+      try { const r = await OpenFinance.connect({ updateItem: b.dataset.reconnect }); if (r) { UI.toast('Conexão renovada', 'ok'); await load(b.dataset.reconnect); } }
+      catch (e) { UI.toast(e.message, 'error', 8000); }
+    }));
+    const ps = $('#psave', root);
+    if (ps) ps.onclick = async () => {
       const id = $('#pcid', root).value.trim(), sec = $('#pcs', root).value.trim();
       if (!id || !sec) return UI.toast('Preencha o Client ID e o Client Secret.', 'error');
       await OpenFinance.setConfig(id, sec);
@@ -168,7 +214,15 @@ Views.bancos = (() => {
       catch (e) { b.disabled = false; UI.toast(e.message, 'error', 8000); }
     }));
     $$('[data-loans]', root).forEach((b) => (b.onclick = () => loans(b.dataset.loans)));
-    $$('[data-del]', root).forEach((b) => (b.onclick = async () => { if (await UI.confirm('Remover esta conexão do app? (No Meu Pluggy ela continua ativa.)', { danger: true, ok: 'Remover' })) { await OpenFinance.removeItem(b.dataset.del); delete cache[b.dataset.del]; App.render(); } }));
+    $$('[data-del]', root).forEach((b) => (b.onclick = async () => {
+      if (OpenFinance.cloud()) {
+        const v = await UI.choose('Remover esta conexão? Os lançamentos já importados continuam no app.', [{ v: 'app', label: 'Só do app' }, { v: 'tudo', label: 'Do app e da Pluggy (revoga o acesso)', cls: 'danger' }], 'Remover conexão');
+        if (!v) return;
+        try { await OpenFinance.removeItem(b.dataset.del, { deleteAtPluggy: v === 'tudo' }); delete cache[b.dataset.del]; UI.toast('Conexão removida', 'ok'); } catch (e) { UI.toast(e.message, 'error', 6000); }
+        return App.render();
+      }
+      if (await UI.confirm('Remover esta conexão do app? (No Meu Pluggy ela continua ativa.)', { danger: true, ok: 'Remover' })) { await OpenFinance.removeItem(b.dataset.del); delete cache[b.dataset.del]; App.render(); }
+    }));
     $$('[data-link]', root).forEach((s) => (s.onchange = async () => {
       const accId = s.dataset.link;
       if (s.value === '__new') {

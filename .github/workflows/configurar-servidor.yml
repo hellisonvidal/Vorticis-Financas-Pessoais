@@ -1,0 +1,68 @@
+# Configura o seu servidor Supabase para a sincronização e o Open Finance (Pluggy), sem precisar abrir o Supabase:
+#   1) cria/atualiza as tabelas e regras de segurança (supabase/schema.sql)
+#   2) guarda as chaves da Pluggy e os e-mails autorizados como secrets do Supabase
+#   3) publica a função "pluggy" (supabase/functions/pluggy)
+# Secrets necessários no GitHub (Settings > Secrets and variables > Actions):
+#   SUPABASE_ACCESS_TOKEN, SUPABASE_PROJECT_REF, PLUGGY_CLIENT_ID, PLUGGY_CLIENT_SECRET, ALLOWED_EMAILS
+name: Configurar servidor (Supabase)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['supabase/**', '.github/workflows/configurar-servidor.yml']
+
+jobs:
+  servidor:
+    name: Publicar tabelas e função do Open Finance
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      PLUGGY_CLIENT_ID: ${{ secrets.PLUGGY_CLIENT_ID }}
+      PLUGGY_CLIENT_SECRET: ${{ secrets.PLUGGY_CLIENT_SECRET }}
+      ALLOWED_EMAILS: ${{ secrets.ALLOWED_EMAILS }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Conferir secrets
+        id: chk
+        run: |
+          faltam=""
+          for v in SUPABASE_ACCESS_TOKEN SUPABASE_PROJECT_REF; do [ -z "${!v}" ] && faltam="$faltam $v"; done
+          if [ -n "$faltam" ]; then echo "::warning::Servidor não configurado. Faltam os secrets:$faltam (veja o LEIA-ME)."; echo "ok=false" >> $GITHUB_OUTPUT; exit 0; fi
+          for v in PLUGGY_CLIENT_ID PLUGGY_CLIENT_SECRET ALLOWED_EMAILS; do [ -z "${!v}" ] && echo "::warning::Secret $v não informado: o Open Finance pelo servidor não vai funcionar até ser configurado."; done
+          echo "ok=true" >> $GITHUB_OUTPUT
+
+      - uses: actions/setup-node@v4
+        if: steps.chk.outputs.ok == 'true'
+        with:
+          node-version: 22
+
+      - name: Tabelas e regras de segurança
+        if: steps.chk.outputs.ok == 'true'
+        run: |
+          node -e 'process.stdout.write(JSON.stringify({query: require("fs").readFileSync("supabase/schema.sql","utf8")}))' > /tmp/q.json
+          code=$(curl -sS -o /tmp/r.json -w '%{http_code}' -X POST "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
+            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H 'Content-Type: application/json' --data @/tmp/q.json)
+          echo "HTTP $code"; head -c 600 /tmp/r.json; echo
+          [ "$code" -ge 200 ] && [ "$code" -lt 300 ]
+
+      - name: Chaves da Pluggy e e-mails autorizados (secrets do Supabase)
+        if: steps.chk.outputs.ok == 'true' && env.PLUGGY_CLIENT_ID != '' && env.PLUGGY_CLIENT_SECRET != '' && env.ALLOWED_EMAILS != ''
+        run: |
+          printf 'PLUGGY_CLIENT_ID=%s\nPLUGGY_CLIENT_SECRET=%s\nALLOWED_EMAILS=%s\n' "$PLUGGY_CLIENT_ID" "$PLUGGY_CLIENT_SECRET" "$ALLOWED_EMAILS" > /tmp/segredos.env
+          npx --yes supabase@2.122.0 secrets set --env-file /tmp/segredos.env --project-ref "$SUPABASE_PROJECT_REF"
+          rm -f /tmp/segredos.env
+
+      - name: Publicar a função "pluggy"
+        if: steps.chk.outputs.ok == 'true'
+        run: npx --yes supabase@2.122.0 functions deploy pluggy --project-ref "$SUPABASE_PROJECT_REF" --use-api
+
+      - name: Testar a função publicada
+        if: steps.chk.outputs.ok == 'true'
+        run: |
+          code=$(curl -sS -o /tmp/f.json -w '%{http_code}' -X POST "https://$SUPABASE_PROJECT_REF.supabase.co/functions/v1/pluggy" -H 'Content-Type: application/json' -d '{"action":"status"}')
+          echo "HTTP $code (sem login, o esperado é 401)"; cat /tmp/f.json; echo
+          [ "$code" = "401" ]

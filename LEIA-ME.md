@@ -25,7 +25,7 @@ Com a sincronização ativada (Supabase, gratuito), o que você lança no comput
   - **Texto colado** do internet banking.
   - **Duplicados** já existentes são detectados e desmarcados. Em Configurações você pode **desfazer** uma importação.
   - **Categorização automática**, por regras e pelo histórico.
-- **Open Finance (automático, via Pluggy no plano gratuito "Meu Pluggy")**: traz os lançamentos das contas e cartões direto do banco, sem baixar arquivo. Também traz os empréstimos e financiamentos para **Endividamento**. Passa pela mesma tela de revisão da importação de arquivos, então nada é duplicado. Veja o passo a passo na seção 4.
+- **Open Finance (automático, via Pluggy)**: você entra no app e toca em **Conectar banco**. A tela da Pluggy abre dentro do app, sem digitar chaves. Os lançamentos das contas e cartões chegam direto do banco e os empréstimos vão para **Endividamento**. Tudo passa pela tela de revisão da importação, então nada é duplicado. Veja a seção 4.
 - **Planilhas**: exporta tudo para Excel e importa a planilha modelo. Reimportar uma planilha exportada **atualiza os lançamentos sem duplicar**.
 - **Relatórios em PDF, Excel e CSV**: resumo do período, despesas e receitas por categoria, fluxo de caixa mensal, comparativo categorias × meses, extrato da conta com saldo linha a linha, lançamentos detalhados, orçamento × realizado, saldos das contas em uma data e faturas do cartão.
 - **Orçamentos** por categoria, com alerta de ritmo e sugestão automática pela média dos últimos 3 meses.
@@ -116,22 +116,52 @@ A partir daí a sincronização é automática: logo após cada alteração, a c
 
 ---
 
-## 4. Open Finance: lançamentos direto do banco (Pluggy, plano gratuito)
+## 4. Open Finance: lançamentos direto do banco (Pluggy)
 
-Só instituições autorizadas pelo Banco Central podem receber dados do Open Finance. Por isso o app usa a **Pluggy**, uma intermediária autorizada. O plano gratuito é o **Meu Pluggy**, para uso pessoal com os seus próprios dados.
+Só instituições autorizadas pelo Banco Central podem receber dados do Open Finance. Por isso o app usa a **Pluggy**, uma intermediária autorizada.
 
-1. Crie sua conta em <https://meu.pluggy.ai> e conecte seus bancos. A autorização acontece no app do próprio banco.
-2. No painel <https://dashboard.pluggy.ai>, com a mesma conta, crie uma aplicação e copie o **Client ID** e o **Client Secret**.
-3. No app, abra **Open Finance**, cole o Client ID e o Client Secret e clique em **Salvar e testar**.
-4. Cole o **ID de cada conexão** (o "item") mostrado no Meu Pluggy e clique em **Adicionar**. No plano gratuito, a Pluggy não deixa o app listar as conexões sozinho.
-5. Para cada conta do banco, escolha a conta correspondente no app (ou **+ Criar conta nova**), defina a data inicial e clique em **Importar lançamentos**. Revise e confirme.
-6. O botão **Empréstimos** traz contratos de empréstimo e financiamento para a tela de Endividamento.
+**Como fica no dia a dia:** você entra no app com seu e-mail e senha, abre **Open Finance** e toca em **Conectar banco**. A tela da Pluggy abre dentro do app: você escolhe o banco e autoriza no app do banco. Depois disso:
+- os lançamentos chegam pela tela de revisão da importação, sem duplicar;
+- os empréstimos vão para **Endividamento**;
+- as conexões aparecem em todos os seus aparelhos.
+
+Não é preciso digitar chave nem ID.
+
+As chaves da Pluggy ficam guardadas **só no seu servidor** (Supabase), numa função chamada `pluggy`. Elas nunca vão dentro do `.exe` ou do `.apk`, que são públicos.
+
+### Configuração única (feita uma vez)
+1. **Supabase:** crie o projeto gratuito (seção 3, passos 1 a 3). Anote o **Reference ID**, que aparece no endereço `https://supabase.com/dashboard/project/<ID>`.
+2. **Token do Supabase:** em <https://supabase.com/dashboard/account/tokens>, clique em **Generate new token** e copie.
+3. **Pluggy:** crie a conta em <https://dashboard.pluggy.ai> e copie o **Client ID** e o **Client Secret** da sua aplicação.
+4. **GitHub:** no repositório, abra **Settings → Secrets and variables → Actions → New repository secret** e cadastre:
+
+   | Nome | Valor |
+   |---|---|
+   | `SUPABASE_PROJECT_REF` | o Reference ID do passo 1 |
+   | `SUPABASE_ACCESS_TOKEN` | o token do passo 2 |
+   | `PLUGGY_CLIENT_ID` | Client ID da Pluggy |
+   | `PLUGGY_CLIENT_SECRET` | Client Secret da Pluggy |
+   | `ALLOWED_EMAILS` | o(s) e-mail(s) que podem usar o Open Finance, separados por vírgula (o seu) |
+
+5. **Publicar o servidor:** na aba **Actions**, abra **"Configurar servidor (Supabase)"** e clique em **Run workflow**. Essa ação:
+   - cria as tabelas e as regras de segurança;
+   - guarda as chaves da Pluggy no Supabase;
+   - publica a função `pluggy` e testa se ela está no ar.
+6. **Gerar os aplicativos já configurados:** rode **"Gerar aplicativos"** (Run workflow) ou envie qualquer alteração. Com os secrets cadastrados, o `.exe` e o `.apk` já vêm com o endereço do seu servidor.
+7. **No app:** em **Configurações → Sincronização**, use **Criar conta** com o e-mail informado em `ALLOWED_EMAILS` e depois **Entrar e sincronizar**. Em seguida abra **Open Finance → Conectar banco**.
+
+**Segurança:**
+- Só os e-mails em `ALLOWED_EMAILS` conseguem usar a função.
+- Cada login só enxerga as conexões vinculadas a ele.
+- Depois de criar sua conta, você pode desligar novos cadastros no Supabase: **Authentication → Sign In / Providers → Allow new users to sign up**.
+
+**Plano gratuito da Pluggy:** não foi possível confirmar se a tela de conexão dentro de outro app está incluída no plano gratuito. Se a Pluggy recusar, há duas saídas:
+- conecte o banco no **Meu Pluggy** (<https://meu.pluggy.ai>) e use **"Já conectei um banco no Meu Pluggy: vincular pelo ID"** na tela Open Finance;
+- use o **modo avançado**, com as chaves guardadas no aparelho.
 
 Observações:
-- As credenciais ficam **só no aparelho**. Elas não vão para o backup nem para a nuvem de sincronização, então configure em cada aparelho.
-- No Windows e no Android as chamadas saem pelo próprio aplicativo. No navegador (versão web), a Pluggy pode bloquear o acesso.
 - Lançamentos ainda **pendentes** no banco ficam de fora e entram quando forem confirmados.
-- O consentimento do Open Finance vence e precisa ser renovado no Meu Pluggy. Se aparecer "Precisa reconectar", reconecte o banco lá.
+- O consentimento do Open Finance vence. Quando aparecer "Precisa reconectar", use o botão **Reconectar**.
 - Se preferir não usar nenhum serviço externo, continue com OFX/CSV (seção 5).
 
 ---
@@ -173,7 +203,8 @@ www/                 interface (HTML/CSS/JS puro, sem build), usada pelos 3 apps
   vendor/            bibliotecas locais (funciona offline)
 desktop/             Electron (Windows) + atualizador (updater.js)
 capacitor.config.json, package.json   Capacitor (Android)
-supabase/schema.sql  tabela, segurança (RLS) e regra de conflito
+supabase/schema.sql  tabelas, segurança (RLS) e regra de conflito
+supabase/functions/pluggy  função do servidor para o Open Finance (guarda as chaves da Pluggy)
 assets/icone/        gerador do ícone (família Vorticis)
 .github/workflows/   compilação automática do APK e do EXE
 ```

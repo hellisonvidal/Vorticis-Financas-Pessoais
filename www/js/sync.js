@@ -166,8 +166,11 @@ const Sync = (() => {
   globalThis.addEventListener && addEventListener('online', () => timer && quiet());
   globalThis.document && document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && timer) quiet(); });
 
+  /** Chama uma função do Supabase (Edge Function) com o login do app */
+  const fn = (name, body) => req('/functions/v1/' + name, { method: 'POST', body: body || {} });
+
   return {
-    cfg, configured, loggedIn, session, signUp, signIn, signOut, syncNow, start, stop, state,
+    cfg, configured, loggedIn, session, signUp, signIn, signOut, syncNow, start, stop, state, fn,
     onState: (f) => { subs.add(f); return () => subs.delete(f); },
     async setConfig(url, key) { await Store.setMeta('sb_url', url.trim()); await Store.setMeta('sb_key', key.trim()); },
   };

@@ -54,3 +54,24 @@ before insert or update on public.fin_records
 for each row execute function public.fin_records_guard();
 
 grant select, insert, update, delete on public.fin_records to authenticated;
+
+-- =====================================================================
+-- Open Finance (Pluggy): conexões de banco vinculadas a cada usuário.
+-- Usado pela função supabase/functions/pluggy (as chaves da Pluggy ficam nos secrets do Supabase).
+-- =====================================================================
+create table if not exists public.fin_pluggy_items (
+  user_id    uuid        not null default auth.uid() references auth.users(id) on delete cascade,
+  item_id    text        not null,
+  name       text,
+  created_at timestamptz not null default now(),
+  primary key (user_id, item_id)
+);
+alter table public.fin_pluggy_items enable row level security;
+drop policy if exists "pluggy_select_own" on public.fin_pluggy_items;
+drop policy if exists "pluggy_insert_own" on public.fin_pluggy_items;
+drop policy if exists "pluggy_update_own" on public.fin_pluggy_items;
+drop policy if exists "pluggy_delete_own" on public.fin_pluggy_items;
+create policy "pluggy_select_own" on public.fin_pluggy_items for select to authenticated using ((select auth.uid()) = user_id);
+create policy "pluggy_insert_own" on public.fin_pluggy_items for insert to authenticated with check ((select auth.uid()) = user_id);
+create policy "pluggy_update_own" on public.fin_pluggy_items for update to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+create policy "pluggy_delete_own" on public.fin_pluggy_items for delete to authenticated using ((select auth.uid()) = user_id);
