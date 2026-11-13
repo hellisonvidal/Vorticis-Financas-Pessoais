@@ -7,7 +7,7 @@ const App = (() => {
   const NAV = [
     ['§', 'Visão geral'], ['painel', 'Painel'], ['lancamentos', 'Lançamentos'], ['contas', 'Contas e cartões'],
     ['§', 'Planejamento'], ['orcamentos', 'Orçamentos'], ['metas', 'Metas'], ['dividas', 'Endividamento'],
-    ['§', 'Ferramentas'], ['importar', 'Importar extrato'], ['relatorios', 'Relatórios'], ['categorias', 'Categorias e regras'], ['config', 'Configurações'],
+    ['§', 'Ferramentas'], ['importar', 'Importar extrato'], ['bancos', 'Open Finance'], ['relatorios', 'Relatórios'], ['categorias', 'Categorias e regras'], ['config', 'Configurações'],
   ];
   const state = { month: U.monthOf(U.today()), route: 'painel', param: null };
   let installEvt = null;

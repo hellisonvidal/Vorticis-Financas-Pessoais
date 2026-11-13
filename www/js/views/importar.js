@@ -33,6 +33,7 @@ Views.importar = (() => {
           <li><b>OFX</b> (recomendado): quase todos os bancos oferecem em "Extrato → Exportar/Salvar como OFX/Money/Quicken". Traz identificadores que evitam duplicidade.</li>
           <li><b>CSV ou Excel</b>: você escolhe quais colunas são data, descrição e valor. O mapeamento fica salvo para a próxima vez.</li>
           <li><b>PDF</b>: leitura automática do texto (PDFs gerados pelo banco, não escaneados). Sempre revise o resultado.</li>
+          <li><b>Open Finance (automático)</b>: traga os lançamentos direto do banco, sem baixar arquivo, pela tela <a href="#/bancos">Open Finance</a> (Pluggy, plano gratuito).</li>
           <li><b>Planilha do sistema</b>: use o <a href="#" id="itpl">modelo de lançamentos</a> para importar várias contas de uma vez (também aceita a planilha exportada em "Exportar tudo").</li>
         </ol>
         <p class="small muted">Lançamentos já existentes na conta são detectados e desmarcados automaticamente.</p>
@@ -81,6 +82,7 @@ Views.importar = (() => {
     return `<div class="card">
       <div class="row between" style="margin-bottom:8px"><div><h3 style="margin:0">Revise os lançamentos — ${U.esc(acc.name)}</h3><span class="small muted">${U.esc(S.fileName)} • ${rows.length} encontrados${dups ? ` • <span class="warn">${dups} já existiam</span>` : ''}${maybe ? ` • <span class="warn">${maybe} possíveis duplicados</span>` : ''}</span></div>
         <div class="row"><label class="check small"><input type="checkbox" id="ionlynew" ${S.onlyNew ? 'checked' : ''}> Ocultar já existentes</label><button class="btn sm" id="iinv">Inverter sinais</button>${S.lines ? '<button class="btn sm" id="itext">Ver texto lido</button>' : ''}</div></div>
+      ${S.note ? `<p class="help small">${U.esc(S.note)}</p>` : ''}
       ${S.kind === 'pdf' || S.kind === 'text' ? '<p class="help small">Leitura automática de PDF/texto: confira datas, valores e <b>sinais</b> (entrada positiva, saída negativa). Use o botão ± na linha para corrigir. Se a leitura não ficar boa, prefira o arquivo OFX ou CSV do banco.</p>' : ''}
       ${S.info && S.info.isCard && acc.type !== 'cartao' ? '<p class="help small warn">Este arquivo parece ser de cartão de crédito, mas a conta escolhida não é um cartão.</p>' : ''}
       ${balInfo}
@@ -149,12 +151,20 @@ Views.importar = (() => {
       if (acc.type === 'cartao' && test.length && test.filter((r) => r.amount > 0).length / test.length > 0.7) S.map.invert = true;
     }
   }
-  function toReview(rows) {
-    if (!rows.length) { UI.toast('Nenhum lançamento encontrado no arquivo.', 'error'); S.busy = false; App.render(); return; }
+  function prepRows(rows) {
     Importers.markDuplicates(rows, S.accountId);
     const learn = F.buildLearner();
     rows.forEach((r) => { r.on = !r.dup; r.category_id = learn(r.description, r.amount > 0 ? 'receita' : 'despesa') || ''; });
-    S.rows = rows.sort((a, b) => a.date.localeCompare(b.date)); S.step = 3; S.busy = false; App.render();
+    S.rows = rows.sort((a, b) => a.date.localeCompare(b.date)); S.step = 3; S.busy = false;
+  }
+  function toReview(rows) {
+    if (!rows.length) { UI.toast('Nenhum lançamento encontrado no arquivo.', 'error'); S.busy = false; App.render(); return; }
+    prepRows(rows); App.render();
+  }
+  /** Recebe lançamentos já prontos (Open Finance) e abre a revisão */
+  function loadRows(accountId, rows, { fileName = 'Open Finance', info = null, note = '' } = {}) {
+    S = fresh(accountId); S.fileName = fileName; S.kind = 'api'; S.info = info; S.note = note;
+    prepRows(rows); App.go('importar');
   }
   function showText(msg) {
     UI.modal({ title: 'Texto lido do arquivo', wide: true, body: `${msg ? `<p class="help small">${U.esc(msg)}</p>` : ''}<textarea class="input" rows="18" readonly style="font-family:ui-monospace,monospace;font-size:12px">${U.esc((S.lines || []).join('\n'))}</textarea>`, actions: [{ label: 'Fechar', cls: 'primary' }] });
@@ -242,5 +252,5 @@ Views.importar = (() => {
     }
   }
 
-  return { title: 'Importar extrato', render, bind, start, live: false };
+  return { title: 'Importar extrato', render, bind, start, loadRows, live: false };
 })();

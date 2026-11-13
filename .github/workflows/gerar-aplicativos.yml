@@ -109,6 +109,8 @@ jobs:
 
       - name: Testar instalador e versão portátil
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: ./.github/testes/testar-windows.ps1
 
       - uses: actions/upload-artifact@v4

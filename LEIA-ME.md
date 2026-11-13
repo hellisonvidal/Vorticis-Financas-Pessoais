@@ -25,6 +25,7 @@ Com a sincronização ativada (Supabase, gratuito), o que você lança no comput
   - **Texto colado** do internet banking.
   - **Duplicados** já existentes são detectados e desmarcados. Em Configurações você pode **desfazer** uma importação.
   - **Categorização automática**, por regras e pelo histórico.
+- **Open Finance (automático, via Pluggy no plano gratuito "Meu Pluggy")**: traz os lançamentos das contas e cartões direto do banco, sem baixar arquivo. Também traz os empréstimos e financiamentos para **Endividamento**. Passa pela mesma tela de revisão da importação de arquivos, então nada é duplicado. Veja o passo a passo na seção 4.
 - **Planilhas**: exporta tudo para Excel e importa a planilha modelo. Reimportar uma planilha exportada **atualiza os lançamentos sem duplicar**.
 - **Relatórios em PDF, Excel e CSV**: resumo do período, despesas e receitas por categoria, fluxo de caixa mensal, comparativo categorias × meses, extrato da conta com saldo linha a linha, lançamentos detalhados, orçamento × realizado, saldos das contas em uma data e faturas do cartão.
 - **Orçamentos** por categoria, com alerta de ritmo e sugestão automática pela média dos últimos 3 meses.
@@ -77,9 +78,9 @@ Há duas opções:
 - **Instalador** (`FinancasPessoais-Instalador-1.0.N.exe`): instala em poucos segundos, sem perguntas, e cria atalhos na área de trabalho e no menu Iniciar. Para atualizar, basta executar o instalador da versão nova.
 - **Portátil** (`FinancasPessoais-Portatil-1.0.N.exe`): roda sem instalar.
 
-As duas usam a **mesma pasta de dados** (`%APPDATA%\Finanças Pessoais`), então dá para trocar de uma para a outra sem perder nada. Não abra as duas ao mesmo tempo: a segunda apenas traz a primeira para a frente.
+As duas usam a **mesma pasta de dados** (`%APPDATA%\FinancasPessoais`), então dá para trocar de uma para a outra sem perder nada. Não abra as duas ao mesmo tempo: a segunda apenas traz a primeira para a frente.
 
-Se aparecer **"O Windows protegeu o computador"**, clique em **Mais informações → Executar assim mesmo**. O aviso aparece porque o app não tem certificado comercial de assinatura, que é pago. Se algo falhar, os detalhes ficam em `%APPDATA%\Finanças Pessoais\registro.txt`.
+Se aparecer **"O Windows protegeu o computador"**, clique em **Mais informações → Executar assim mesmo**. O aviso aparece porque o app não tem certificado comercial de assinatura, que é pago. Se algo falhar, os detalhes ficam em `%APPDATA%\FinancasPessoais\registro.txt`.
 
 Cada versão é **testada automaticamente** num Windows do GitHub antes de ser publicada: o processo instala, abre o app, confere a tela, testa a versão portátil e desinstala.
 
@@ -106,7 +107,27 @@ A partir daí a sincronização é automática: logo após cada alteração, a c
 
 ---
 
-## 4. Como exportar o extrato do seu banco
+## 4. Open Finance: lançamentos direto do banco (Pluggy, plano gratuito)
+
+Só instituições autorizadas pelo Banco Central podem receber dados do Open Finance. Por isso o app usa a **Pluggy**, uma intermediária autorizada. O plano gratuito é o **Meu Pluggy**, para uso pessoal com os seus próprios dados.
+
+1. Crie sua conta em <https://meu.pluggy.ai> e conecte seus bancos. A autorização acontece no app do próprio banco.
+2. No painel <https://dashboard.pluggy.ai>, com a mesma conta, crie uma aplicação e copie o **Client ID** e o **Client Secret**.
+3. No app, abra **Open Finance**, cole o Client ID e o Client Secret e clique em **Salvar e testar**.
+4. Cole o **ID de cada conexão** (o "item") mostrado no Meu Pluggy e clique em **Adicionar**. No plano gratuito, a Pluggy não deixa o app listar as conexões sozinho.
+5. Para cada conta do banco, escolha a conta correspondente no app (ou **+ Criar conta nova**), defina a data inicial e clique em **Importar lançamentos**. Revise e confirme.
+6. O botão **Empréstimos** traz contratos de empréstimo e financiamento para a tela de Endividamento.
+
+Observações:
+- As credenciais ficam **só no aparelho**. Elas não vão para o backup nem para a nuvem de sincronização, então configure em cada aparelho.
+- No Windows e no Android as chamadas saem pelo próprio aplicativo. No navegador (versão web), a Pluggy pode bloquear o acesso.
+- Lançamentos ainda **pendentes** no banco ficam de fora e entram quando forem confirmados.
+- O consentimento do Open Finance vence e precisa ser renovado no Meu Pluggy. Se aparecer "Precisa reconectar", reconecte o banco lá.
+- Se preferir não usar nenhum serviço externo, continue com OFX/CSV (seção 5).
+
+---
+
+## 5. Como exportar o extrato do seu banco
 
 Procure no internet banking (computador) por **Extrato → Exportar / Salvar como / Baixar**:
 - **OFX** (às vezes aparece como "Money", "Quicken" ou "Gerenciador financeiro"): é a melhor opção.
@@ -117,7 +138,7 @@ Procure no internet banking (computador) por **Extrato → Exportar / Salvar com
 
 ---
 
-## 5. Primeiros passos no app
+## 6. Primeiros passos no app
 
 1. **Contas e cartões → Nova conta**: cadastre cada conta com o saldo que ela tinha antes do primeiro lançamento. Nos cartões, informe limite, dia de fechamento e dia de vencimento.
 2. Lance as despesas e receitas pelo botão **+** ou **importe os extratos**.
@@ -128,7 +149,7 @@ Quer só conhecer o sistema? Clique em **"Ver com dados de exemplo"** no painel.
 
 ---
 
-## 6. Para desenvolvedores
+## 7. Para desenvolvedores
 
 ```
 www/                 interface (HTML/CSS/JS puro, sem build), usada pelos 3 apps
@@ -136,6 +157,7 @@ www/                 interface (HTML/CSS/JS puro, sem build), usada pelos 3 apps
   js/sync.js         sincronização via API REST do Supabase ("último a salvar vence")
   js/finance.js      regras: saldos, parcelas, faturas, orçamentos, categorização
   js/debts.js        endividamento: indicadores, plano de quitação, leitura do Registrato (SCR)
+  js/openfinance.js  Open Finance via Pluggy (contas, lançamentos, empréstimos)
   js/importers.js    OFX, CSV, Excel, PDF e texto
   js/reports.js      relatórios → tela, PDF (jsPDF), Excel (SheetJS), CSV
   vendor/            bibliotecas locais (funciona offline)
