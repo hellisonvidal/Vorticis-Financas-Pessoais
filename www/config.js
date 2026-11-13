@@ -1,8 +1,8 @@
-/* Configuração opcional da sincronização.
- * Se preencher aqui ANTES de gerar o .exe e o .apk, os aplicativos já vêm prontos para sincronizar
- * (basta entrar com e-mail e senha). Também é possível informar estes dados na tela Configurações.
- * A "anon key" (publishable key) é pública por natureza; a segurança vem do login + RLS do Supabase. */
+/* Servidor de sincronização e Open Finance (Supabase do projeto "financas-pessoais").
+ * Com isto preenchido, os aplicativos já vêm prontos: basta entrar com e-mail e senha.
+ * A "anon key" é pública por natureza: a segurança vem do login + regras RLS do Supabase.
+ * (Se os secrets SUPABASE_PROJECT_REF/SUPABASE_ACCESS_TOKEN existirem no GitHub, a compilação regrava este arquivo.) */
 window.APP_CONFIG = {
-  supabaseUrl: '',      // ex.: 'https://abcdefghijklm.supabase.co'
-  supabaseAnonKey: '',  // ex.: 'eyJhbGciOi...' ou 'sb_publishable_...'
+  supabaseUrl: 'https://gdzgaxlcqjieczeabncq.supabase.co',
+  supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdkemdheGxjcWppZWN6ZWFibmNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ1ODU2MDEsImV4cCI6MjExMDE2MTYwMX0.-q8mJ8eR_qECCPkOUOugt2wRcArZxflwmEUeqSXJG_E',
 };

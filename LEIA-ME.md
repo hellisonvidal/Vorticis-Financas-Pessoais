@@ -129,7 +129,16 @@ Não é preciso digitar chave nem ID.
 
 As chaves da Pluggy ficam guardadas **só no seu servidor** (Supabase), numa função chamada `pluggy`. Elas nunca vão dentro do `.exe` ou do `.apk`, que são públicos.
 
-### Configuração única (feita uma vez)
+### Situação atual deste repositório
+O servidor já foi criado no seu Supabase: projeto **financas-pessoais**, em São Paulo, com as tabelas e a função `pluggy` publicadas. Os aplicativos já vêm apontando para ele. Falta só cadastrar as chaves da Pluggy:
+1. Crie a conta em <https://dashboard.pluggy.ai> e copie o **Client ID** e o **Client Secret**.
+2. No Supabase, abra o projeto **financas-pessoais → Edge Functions → Secrets** (ou **Project Settings → Edge Functions**) e adicione três secrets:
+   - `PLUGGY_CLIENT_ID`
+   - `PLUGGY_CLIENT_SECRET`
+   - `ALLOWED_EMAILS`: o seu e-mail; se forem vários, separe por vírgula.
+3. No app, abra **Configurações → Sincronização → Criar conta** com esse e-mail e depois clique em **Entrar e sincronizar**. Em seguida abra **Open Finance → Conectar banco**.
+
+### Configuração única para um servidor novo (pelo GitHub)
 1. **Supabase:** crie o projeto gratuito (seção 3, passos 1 a 3). Anote o **Reference ID**, que aparece no endereço `https://supabase.com/dashboard/project/<ID>`.
 2. **Token do Supabase:** em <https://supabase.com/dashboard/account/tokens>, clique em **Generate new token** e copie.
 3. **Pluggy:** crie a conta em <https://dashboard.pluggy.ai> e copie o **Client ID** e o **Client Secret** da sua aplicação.

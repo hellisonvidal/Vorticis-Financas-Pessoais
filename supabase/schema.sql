@@ -75,3 +75,4 @@ create policy "pluggy_select_own" on public.fin_pluggy_items for select to authe
 create policy "pluggy_insert_own" on public.fin_pluggy_items for insert to authenticated with check ((select auth.uid()) = user_id);
 create policy "pluggy_update_own" on public.fin_pluggy_items for update to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 create policy "pluggy_delete_own" on public.fin_pluggy_items for delete to authenticated using ((select auth.uid()) = user_id);
+grant select, insert, update, delete on public.fin_pluggy_items to authenticated;
