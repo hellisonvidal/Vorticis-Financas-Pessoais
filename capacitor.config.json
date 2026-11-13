@@ -1,6 +1,6 @@
 {
   "appId": "br.com.financaspessoais.app",
-  "appName": "Finanças Pessoais",
+  "appName": "Vorticis Finanças Pessoais",
   "webDir": "www",
   "android": {
     "allowMixedContent": false,

@@ -5,7 +5,7 @@ Sistema completo de controle financeiro pessoal. **Uma única base de código** 
 | Plataforma | Arquivo | Como é gerado |
 |---|---|---|
 | Windows | `FinancasPessoais-Instalador-1.0.N.exe` e `FinancasPessoais-Portatil-1.0.N.exe` | Electron (automático no GitHub) |
-| Android | `FinancasPessoais.apk` | Capacitor (automático no GitHub) |
+| Android | `VorticisFinancasPessoais.apk` | Capacitor (automático no GitHub) |
 | Navegador / PWA | pasta `www` | funciona direto, até offline |
 
 Com a sincronização ativada (Supabase, gratuito), o que você lança no computador aparece no celular e vice-versa.
@@ -63,13 +63,13 @@ Os aplicativos são compilados de graça nos servidores do GitHub. Você não pr
 4. No site do GitHub, abra a aba **Actions**. A execução **"Gerar aplicativos"** começa sozinha e leva cerca de 10 minutos.
 5. Quando ficar verde ✔, clique nela e baixe em **Artifacts**:
    - `windows-exe`: tem o **instalador** e a versão **portátil** (roda sem instalar).
-   - `android-apk`: tem o **FinancasPessoais.apk**.
+   - `android-apk`: tem o **VorticisFinancasPessoais.apk**.
 
 > **Atualizações:** a cada novo envio (push), novos arquivos são gerados. O APK usa sempre a mesma assinatura (pasta `android-signing`), então você instala por cima da versão anterior **sem perder os dados**.
 > Cada compilação também publica automaticamente uma **versão** (ex.: `v1.0.3`) com os arquivos anexados, na seção **Releases** do repositório. É o jeito mais fácil de baixar.
 
 ### Instalar no Android
-1. Copie o `FinancasPessoais.apk` para o celular (pelo Google Drive, por cabo ou pelo WhatsApp para você mesmo).
+1. Copie o `VorticisFinancasPessoais.apk` para o celular (pelo Google Drive, por cabo ou pelo WhatsApp para você mesmo).
 2. Toque no arquivo. Se o Android pedir, permita **"Instalar apps desconhecidos"** para o aplicativo que está abrindo o arquivo.
 3. Toque em **Instalar**. Se aparecer o aviso do Play Protect, escolha **"Instalar assim mesmo"**. Ele aparece porque o app não veio da Play Store.
 

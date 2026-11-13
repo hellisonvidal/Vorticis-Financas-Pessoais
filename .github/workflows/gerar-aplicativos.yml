@@ -1,5 +1,5 @@
 # Gera automaticamente os aplicativos a cada envio para o GitHub:
-#   - Android: FinancasPessoais.apk
+#   - Android: VorticisFinancasPessoais.apk
 #   - Windows: instalador .exe e versão portátil .exe
 #   - Web (opcional): publica a versão PWA no GitHub Pages
 # Os arquivos ficam em: aba "Actions" > execução mais recente > seção "Artifacts".
@@ -69,6 +69,11 @@ jobs:
         timeout-minutes: 6
         run: npm run android:icons
 
+      - name: Nome do app no Android
+        run: |
+          grep -n "app_name\|title_activity_main" android/app/src/main/res/values/strings.xml
+          grep -q "Vorticis Finanças Pessoais" android/app/src/main/res/values/strings.xml
+
       - name: Versão do app
         run: |
           sed -i "s/versionCode 1$/versionCode ${{ github.run_number }}/" android/app/build.gradle
@@ -101,12 +106,12 @@ jobs:
           ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Renomear APK
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk FinancasPessoais.apk
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk VorticisFinancasPessoais.apk
 
       - uses: actions/upload-artifact@v4
         with:
           name: android-apk
-          path: FinancasPessoais.apk
+          path: VorticisFinancasPessoais.apk
 
   windows:
     name: Windows (EXE)
@@ -207,6 +212,6 @@ jobs:
 
             ---
             **Windows:** `FinancasPessoais-Instalador-*.exe` (instala com atalho) ou `FinancasPessoais-Portatil-*.exe` (roda sem instalar).
-            **Android:** `FinancasPessoais.apk` (instale por cima da versão anterior; seus dados são mantidos).
+            **Android:** `VorticisFinancasPessoais.apk` (instale por cima da versão anterior; seus dados são mantidos).
             Passo a passo de instalação e sincronização no arquivo LEIA-ME.md.
           files: saida/*
