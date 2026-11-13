@@ -9,7 +9,7 @@ const Debts = (() => {
     conta_atrasada: 'Conta em atraso (luz, telefone, loja…)', imposto: 'Impostos / tributos', outro: 'Outra dívida',
   };
   const STATUS = { em_dia: 'Em dia', atrasada: 'Em atraso', negociando: 'Negociando', quitada: 'Quitada' };
-  const SOURCES = { manual: 'Cadastro manual', registrato: 'Registrato (Banco Central)', serasa: 'Serasa', spc: 'SPC Brasil', boavista: 'Boa Vista (SCPC)', protesto: 'Protesto em cartório' };
+  const SOURCES = { manual: 'Cadastro manual', registrato: 'Registrato (Banco Central)', serasa: 'Serasa', spc: 'SPC Brasil', boavista: 'Boa Vista (SCPC)', protesto: 'Protesto em cartório', openfinance: 'Open Finance (banco)' };
   const CAT = 'cat-dividas';
 
   // Fontes oficiais de consulta gratuita do próprio CPF

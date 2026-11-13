@@ -1,5 +1,5 @@
 /* Aplicativo Windows (Electron): abre a mesma interface da pasta www em uma janela própria. */
-const { app, BrowserWindow, protocol, shell, Menu, dialog } = require('electron');
+const { app, BrowserWindow, protocol, shell, Menu, dialog, ipcMain, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -9,10 +9,26 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } },
 ]);
 
-// Mesma pasta de dados para o instalador e para a versão portátil
-app.setPath('userData', path.join(app.getPath('appData'), 'Finanças Pessoais'));
+// Mesma pasta de dados para o instalador e para a versão portátil.
+// Nome SEM acentos: com "ç" no caminho o banco local (IndexedDB/LevelDB) do Chromium não abre.
+const USER_DATA = process.env.FP_UD || path.join(app.getPath('appData'), 'FinancasPessoais');
+const OLD_USER_DATA = path.join(app.getPath('appData'), 'Finanças Pessoais'); // versões até 1.0.6
+try {
+  if (!process.env.FP_UD && !fs.existsSync(USER_DATA) && fs.existsSync(OLD_USER_DATA)) {
+    // copia para uma pasta temporária e só renomeia no fim: uma cópia interrompida nunca vira a pasta oficial
+    const tmp = USER_DATA + '.migrando';
+    fs.rmSync(tmp, { recursive: true, force: true });
+    fs.cpSync(OLD_USER_DATA, tmp, { recursive: true, filter: (src) => !/[\\/](Singleton\w*|lockfile|LOCK)$/.test(src) });
+    fs.writeFileSync(path.join(tmp, 'migrado-de-versao-anterior.txt'), 'Dados copiados de ' + OLD_USER_DATA + ' em ' + new Date().toISOString() + '\n');
+    fs.renameSync(tmp, USER_DATA);
+  }
+} catch (e) {
+  // se a cópia falhar (ex.: versão antiga aberta), tenta de novo na próxima abertura
+  try { fs.rmSync(USER_DATA + '.migrando', { recursive: true, force: true }); } catch (e2) { /* ignora */ }
+}
+app.setPath('userData', USER_DATA);
 
-// Registro de erros (ajuda a diagnosticar problemas): %APPDATA%\Finanças Pessoais\registro.txt
+// Registro de erros (ajuda a diagnosticar problemas): %APPDATA%\FinancasPessoais\registro.txt
 function log(...a) {
   try { fs.appendFileSync(path.join(app.getPath('userData'), 'registro.txt'), new Date().toISOString() + ' ' + a.join(' ') + '\n'); } catch (e) { /* ignora */ }
 }
@@ -30,7 +46,7 @@ function createWindow() {
     width: 1320, height: 860, minWidth: 380, minHeight: 560,
     title: 'Finanças Pessoais', backgroundColor: '#f4f6fb', autoHideMenuBar: true,
     icon: path.join(__dirname, 'icon.ico'),
-    webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, spellcheck: false },
+    webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, spellcheck: false, preload: path.join(__dirname, 'preload.js') },
   });
   win.loadURL('app://financas/index.html');
   win.webContents.on('did-fail-load', (e, code, desc, url) => {
@@ -50,6 +66,16 @@ function createWindow() {
 }
 
 app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
+
+// Requisições do Open Finance feitas pelo processo principal (sem CORS). Só para a API da Pluggy.
+const ALLOWED_HTTP = [/^https:\/\/api\.pluggy\.ai\//];
+if (process.env.FP_TESTE_URL) ALLOWED_HTTP.push(new RegExp('^' + process.env.FP_TESTE_URL.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')));
+ipcMain.handle('http', async (e, req) => {
+  if (!req || typeof req.url !== 'string' || !ALLOWED_HTTP.some((r) => r.test(req.url))) throw new Error('Endereço não permitido');
+  const method = ['GET', 'POST', 'PATCH'].includes(req.method) ? req.method : 'GET';
+  const res = await net.fetch(req.url, { method, headers: req.headers || {}, body: method === 'GET' ? undefined : req.body, redirect: 'error' });
+  return { status: res.status, body: await res.text() };
+});
 
 app.whenReady().then(() => {
   log('iniciando versão', app.getVersion(), 'em', app.getAppPath());
