@@ -100,7 +100,7 @@ Views.config = (() => {
       const file = bf.files[0]; if (!file) return;
       try {
         const data = JSON.parse(await U.readText(file));
-        if (!data || data.app !== 'financas-pessoais') throw new Error('Este arquivo não é um backup do Finanças Pessoais.');
+        if (!data || data.app !== 'financas-pessoais') throw new Error('Este arquivo não é um backup do Vorticis Finanças Pessoais.');
         const n = Object.values(data.collections || {}).reduce((a, x) => a + x.length, 0);
         const mode = await UI.choose(`Backup de ${data.exported_at ? new Date(data.exported_at).toLocaleString('pt-BR') : 'data desconhecida'} com ${n} registro(s).<br><br><b>Mesclar</b>: mantém os dados atuais e acrescenta/atualiza com o backup (o mais recente vence).<br><b>Substituir</b>: apaga os dados atuais e deixa exatamente como no backup.`, [{ v: 'merge', label: 'Mesclar', cls: 'primary' }, { v: 'replace', label: 'Substituir tudo', cls: 'danger' }], 'Restaurar backup');
         if (!mode) return;

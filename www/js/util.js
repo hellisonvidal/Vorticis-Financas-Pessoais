@@ -177,12 +177,12 @@ const U = (() => {
       const r = await Filesystem.writeFile({ path: filename, data: base64, directory: 'CACHE' });
       let saved = false;
       try {
-        await Filesystem.writeFile({ path: 'FinancasPessoais/' + filename, data: base64, directory: 'DOCUMENTS', recursive: true });
+        await Filesystem.writeFile({ path: 'VorticisFinancasPessoais/' + filename, data: base64, directory: 'DOCUMENTS', recursive: true });
         saved = true;
       } catch (e) { /* sem permissão nesta versão do Android: segue só com o compartilhamento */ }
       try { if (Share) await Share.share({ title: filename, url: r.uri, dialogTitle: 'Salvar ou compartilhar' }); }
       catch (e) { /* usuário fechou o menu de compartilhar */ }
-      return saved ? 'Documentos/FinancasPessoais/' + filename : null;
+      return saved ? 'Documentos/VorticisFinancasPessoais/' + filename : null;
     }
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

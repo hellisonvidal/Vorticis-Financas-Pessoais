@@ -1,9 +1,9 @@
 {
   "name": "financas-pessoais-desktop",
-  "productName": "Finanças Pessoais",
+  "productName": "Vorticis Finanças Pessoais",
   "version": "1.0.0",
   "description": "Controle de finanças pessoais",
-  "author": "Finanças Pessoais",
+  "author": "Vorticis Finanças Pessoais",
   "main": "main.js",
   "private": true,
   "scripts": {
@@ -17,8 +17,8 @@
   },
   "build": {
     "appId": "br.com.financaspessoais.app",
-    "productName": "Finanças Pessoais",
-    "executableName": "FinancasPessoais",
+    "productName": "Vorticis Finanças Pessoais",
+    "executableName": "VorticisFinancasPessoais",
     "directories": {
       "output": "dist"
     },
@@ -42,13 +42,13 @@
       "runAfterFinish": true,
       "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
-      "shortcutName": "Finanças Pessoais",
-      "uninstallDisplayName": "Finanças Pessoais",
+      "shortcutName": "Vorticis Finanças Pessoais",
+      "uninstallDisplayName": "Vorticis Finanças Pessoais",
       "deleteAppDataOnUninstall": false,
-      "artifactName": "FinancasPessoais-Instalador-${version}.${ext}"
+      "artifactName": "VorticisFinancasPessoais-Instalador-${version}.${ext}"
     },
     "portable": {
-      "artifactName": "FinancasPessoais-Portatil-${version}.${ext}"
+      "artifactName": "VorticisFinancasPessoais-Portatil-${version}.${ext}"
     },
     "publish": [
       {

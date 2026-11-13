@@ -1,5 +1,5 @@
 -- =====================================================================
--- Finanças Pessoais — estrutura de sincronização no Supabase
+-- Vorticis Finanças Pessoais — estrutura de sincronização no Supabase
 -- Execute UMA vez em: Supabase > SQL Editor > New query > cole tudo > Run
 -- (pode ser executado de novo sem problemas)
 -- =====================================================================
@@ -76,3 +76,24 @@ create policy "pluggy_insert_own" on public.fin_pluggy_items for insert to authe
 create policy "pluggy_update_own" on public.fin_pluggy_items for update to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 create policy "pluggy_delete_own" on public.fin_pluggy_items for delete to authenticated using ((select auth.uid()) = user_id);
 grant select, insert, update, delete on public.fin_pluggy_items to authenticated;
+
+-- Donos do servidor (podem usar o Open Finance e cadastrar as chaves da Pluggy pelo app).
+-- O primeiro login que abrir o Open Finance vira dono automaticamente.
+create table if not exists public.fin_owners (
+  user_id    uuid primary key references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+alter table public.fin_owners enable row level security;
+drop policy if exists "owners_select_own" on public.fin_owners;
+create policy "owners_select_own" on public.fin_owners for select to authenticated using ((select auth.uid()) = user_id);
+revoke all on public.fin_owners from anon;
+grant select on public.fin_owners to authenticated;
+
+-- Configuração do servidor (chaves da Pluggy). RLS sem políticas: só a função do servidor (service role) lê e grava.
+create table if not exists public.fin_server_config (
+  key        text primary key,
+  value      text not null,
+  updated_at timestamptz not null default now()
+);
+alter table public.fin_server_config enable row level security;
+revoke all on public.fin_server_config from anon, authenticated;

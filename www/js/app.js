@@ -28,7 +28,7 @@ const App = (() => {
     const y = window.scrollY;
     try {
       const title = typeof v.title === 'function' ? v.title(param) : v.title;
-      $('#title').textContent = title; document.title = title + ' • Finanças Pessoais';
+      $('#title').textContent = title; document.title = title + ' • Vorticis Finanças Pessoais';
       // contêiner novo a cada renderização: os eventos antigos são descartados junto
       const inner = document.createElement('div');
       inner.innerHTML = v.render(param);

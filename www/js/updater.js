@@ -83,9 +83,9 @@ const Updater = (() => {
         try { await FS.rmdir({ path: 'atualizacao', directory: 'CACHE', recursive: true }); } catch (e) { /* não existia */ }
         let sub = null;
         try { sub = await FS.addListener('progress', (p) => { if (p.contentLength) set({ percent: Math.min(99, Math.round(p.bytes / p.contentLength * 100)) }); }); } catch (e) { /* sem progresso */ }
-        const r = await FS.downloadFile({ url: state.asset.browser_download_url, path: `atualizacao/FinancasPessoais-${state.latest}.apk`, directory: 'CACHE', recursive: true, progress: true });
+        const r = await FS.downloadFile({ url: state.asset.browser_download_url, path: `atualizacao/VorticisFinancasPessoais-${state.latest}.apk`, directory: 'CACHE', recursive: true, progress: true });
         if (sub && sub.remove) sub.remove();
-        const st = await FS.stat({ path: `atualizacao/FinancasPessoais-${state.latest}.apk`, directory: 'CACHE' });
+        const st = await FS.stat({ path: `atualizacao/VorticisFinancasPessoais-${state.latest}.apk`, directory: 'CACHE' });
         if (state.asset.size && st.size !== state.asset.size) throw new Error('Download incompleto. Tente de novo.');
         set({ status: 'ready', percent: 100, file: r.path || st.uri });
         return;
@@ -107,7 +107,7 @@ const Updater = (() => {
       }
       location.reload();
     } catch (e) {
-      const msg = /permission|unknown|desconhecid/i.test(e.message || '') ? 'Permita "Instalar apps desconhecidos" para o Finanças Pessoais nas configurações do Android e tente de novo.' : (e.message || String(e));
+      const msg = /permission|unknown|desconhecid/i.test(e.message || '') ? 'Permita "Instalar apps desconhecidos" para o Vorticis Finanças Pessoais nas configurações do Android e tente de novo.' : (e.message || String(e));
       set({ status: 'error', error: msg });
     }
   }

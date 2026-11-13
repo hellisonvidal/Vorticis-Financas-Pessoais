@@ -1,10 +1,10 @@
-# Finanças Pessoais
+# Vorticis Finanças Pessoais
 
 Sistema completo de controle financeiro pessoal. **Uma única base de código** gera:
 
 | Plataforma | Arquivo | Como é gerado |
 |---|---|---|
-| Windows | `FinancasPessoais-Instalador-1.0.N.exe` e `FinancasPessoais-Portatil-1.0.N.exe` | Electron (automático no GitHub) |
+| Windows | `VorticisFinancasPessoais-Instalador-1.0.N.exe` e `VorticisFinancasPessoais-Portatil-1.0.N.exe` | Electron (automático no GitHub) |
 | Android | `VorticisFinancasPessoais.apk` | Capacitor (automático no GitHub) |
 | Navegador / PWA | pasta `www` | funciona direto, até offline |
 
@@ -75,8 +75,8 @@ Os aplicativos são compilados de graça nos servidores do GitHub. Você não pr
 
 ### Instalar no Windows
 Há duas opções:
-- **Instalador** (`FinancasPessoais-Instalador-1.0.N.exe`): instala em poucos segundos, sem perguntas, e cria atalhos na área de trabalho e no menu Iniciar. Para atualizar, basta executar o instalador da versão nova.
-- **Portátil** (`FinancasPessoais-Portatil-1.0.N.exe`): roda sem instalar.
+- **Instalador** (`VorticisFinancasPessoais-Instalador-1.0.N.exe`): instala em poucos segundos, sem perguntas, e cria atalhos na área de trabalho e no menu Iniciar. Para atualizar, basta executar o instalador da versão nova.
+- **Portátil** (`VorticisFinancasPessoais-Portatil-1.0.N.exe`): roda sem instalar.
 
 As duas usam a **mesma pasta de dados** (`%APPDATA%\FinancasPessoais`), então dá para trocar de uma para a outra sem perder nada. Não abra as duas ao mesmo tempo: a segunda apenas traz a primeira para a frente.
 
@@ -88,7 +88,7 @@ Cada versão é **testada automaticamente** num Windows do GitHub antes de ser p
 A partir da versão 1.0.13, o app verifica sozinho se há versão nova ao abrir (no máximo a cada 6 horas). Quando houver, aparece uma faixa no topo com **Baixar e instalar**. Também dá para verificar em **Configurações → Atualizações**.
 - **Windows (instalado):** baixa a nova versão, confere o arquivo, fecha e reabre já atualizado.
 - **Windows (portátil):** baixa o novo `.exe` portátil na mesma pasta e abre a versão nova. O arquivo antigo pode ser apagado depois.
-- **Android:** baixa o novo APK dentro do app e abre o instalador do Android. Na primeira vez, permita **"Instalar apps desconhecidos"** para o Finanças Pessoais.
+- **Android:** baixa o novo APK dentro do app e abre o instalador do Android. Na primeira vez, permita **"Instalar apps desconhecidos"** para o Vorticis Finanças Pessoais.
 - **Seus dados são mantidos** em todos os casos.
 
 Quem está numa versão anterior à 1.0.13 precisa instalar a 1.0.13 manualmente uma vez. Depois disso, as atualizações são feitas pelo app.

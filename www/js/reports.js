@@ -241,7 +241,7 @@ const Reports = (() => {
       }
     }
     const pages = doc.getNumberOfPages();
-    const gen = 'Gerado em ' + new Date().toLocaleString('pt-BR') + ' • Finanças Pessoais';
+    const gen = 'Gerado em ' + new Date().toLocaleString('pt-BR') + ' • Vorticis Finanças Pessoais';
     for (let i = 1; i <= pages; i++) { doc.setPage(i); doc.setFontSize(7.5); doc.setTextColor(120); doc.text(gen, 12, H - 6); doc.text(`Página ${i} de ${pages}`, W - 12, H - 6, { align: 'right' }); }
     const out = doc.output('blob');
     return U.saveFile(filename + '.pdf', out, 'application/pdf');

@@ -148,6 +148,7 @@ const OpenFinance = (() => {
   }
   async function link(pluggyAccId, localId) { const l = { ...links() }; if (localId) l[pluggyAccId] = localId; else delete l[pluggyAccId]; await Store.setMeta('pluggy_links', l); }
   // ---------- modo nuvem: conexões guardadas no servidor (aparecem em todos os aparelhos) ----------
+  const setServerKeys = (clientId, clientSecret) => call('set-keys', { clientId, clientSecret });
   async function loadCloudItems() { const r = await call('items'); cloudItems = (r && r.results) || []; return cloudItems; }
   async function registerItem(id) { const it = await call('register', { itemId: safeId(id) }); await loadCloudItems(); return it; }
   /** Abre a tela de login do banco (Pluggy Connect) dentro do app. updateItem = reconectar uma conexão existente */
@@ -210,6 +211,6 @@ const OpenFinance = (() => {
     return recs.length;
   }
 
-  return { mode, cloud, directConfigured, loadCloudItems, connect, configured, cfg, setConfig, clearAll, items, links, link, addItem, removeItem, saveItemInfo, test, fetchItem, fetchAccounts, fetchTransactions, fetchLoans,
+  return { setServerKeys, mode, cloud, directConfigured, loadCloudItems, connect, configured, cfg, setConfig, clearAll, items, links, link, addItem, removeItem, saveItemInfo, test, fetchItem, fetchAccounts, fetchTransactions, fetchLoans,
     refreshItem, rowsFrom, toRow, txDate, accType, accLabel, createLocalAccount, loanToDebt, saveLoans, cents, base };
 })();

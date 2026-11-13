@@ -1,7 +1,7 @@
-"""Gera o ícone do Finanças Pessoais (família Vorticis) e todas as variações usadas pelo app.
+"""Gera o ícone do Vorticis Finanças Pessoais (família Vorticis) e todas as variações usadas pelo app.
 
 Variação do ícone do Vorticis Monitor (bloco arredondado em degradê + vórtice em faixas
-que afinam para o centro), nas cores do Finanças Pessoais: bloco índigo→violeta e vórtice
+que afinam para o centro), nas cores do Vorticis Finanças Pessoais: bloco índigo→violeta e vórtice
 branco/lilás centralizado, sem selo.
 
 Uso (na raiz do projeto):  python3 -I assets/icone/gerar_icone.py   (requer Pillow)

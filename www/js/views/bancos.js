@@ -45,13 +45,26 @@ Views.bancos = (() => {
       } else if (!srv.checked) {
         if (!srv.loading) setTimeout(checkServer, 0);
         top = '<div class="card"><p class="muted">Verificando o servidor…</p></div>';
-      } else if (!srv.ok || !srv.configured) {
-        top = `<div class="card"><h3>${icon('alert')} Servidor do Open Finance ainda não está pronto</h3>
-          <p class="small ${srv.ok ? '' : 'neg'}">${U.esc(srv.ok ? 'A função está publicada, mas as chaves da Pluggy não foram configuradas no servidor.' : srv.err)}</p>
-          <div class="help small"><b>Configuração única (feita uma vez, pelo GitHub):</b><ol>
-            <li>Crie a conta grátis na <a href="https://dashboard.pluggy.ai" target="_blank" rel="noopener">Pluggy</a> e copie o <b>Client ID</b> e o <b>Client Secret</b>.</li>
-            <li>No repositório do GitHub, em <b>Settings → Secrets and variables → Actions</b>, cadastre os secrets listados no LEIA-ME (seção Open Finance).</li>
-            <li>Rode a ação <b>"Configurar servidor (Supabase)"</b> na aba Actions. Ela publica a função e guarda as chaves no seu Supabase.</li></ol></div>
+      } else if (srv.ok && !srv.configured) {
+        top = `<div class="card">
+          <h3>${icon('shield')} Cadastre as chaves da Pluggy (só uma vez)</h3>
+          <p class="small">As chaves ficam guardadas <b>no seu servidor</b> e não ficam no aparelho. Depois disso, em qualquer aparelho, basta tocar em <b>Conectar banco</b>.</p>
+          <div class="help small"><b>Onde encontrar:</b><ol>
+            <li>Entre em <a href="https://dashboard.pluggy.ai" target="_blank" rel="noopener">dashboard.pluggy.ai</a> (é o painel de desenvolvedor, diferente do meu.pluggy.ai). Use "Sign up" se ainda não tiver conta.</li>
+            <li>No menu <b>Applications</b>, abra (ou crie) a sua aplicação. Na lista de conectores dela, inclua o <b>MeuPluggy</b>.</li>
+            <li>Na página da aplicação, crie uma <b>Development Application</b>. Ela mostra o <b>Client ID</b> e o <b>Client Secret</b>.</li>
+            <li>Cole os dois abaixo e clique em <b>Salvar no servidor</b>. O servidor confere as chaves com a Pluggy antes de salvar.</li></ol></div>
+          <div class="form" style="margin-top:12px">
+            <label class="field full"><span>Client ID</span><input class="input" id="skid" autocomplete="off" spellcheck="false" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"></label>
+            <label class="field full"><span>Client Secret</span><input class="input" id="sksec" type="password" autocomplete="off" spellcheck="false"></label>
+          </div>
+          <div class="row" style="margin-top:12px"><button class="btn primary" id="sksave">${icon('check')}Salvar no servidor</button><button class="btn ghost" id="precheck">${icon('sync')}Verificar de novo</button></div>
+        </div>`;
+      } else if (!srv.ok) {
+        const semFuncao = /não foi publicada/i.test(srv.err);
+        top = `<div class="card"><h3>${icon('alert')} Não foi possível usar o servidor do Open Finance</h3>
+          <p class="small neg">${U.esc(srv.err)}</p>
+          ${semFuncao ? `<div class="help small">A função "pluggy" precisa estar publicada no seu Supabase. Veja a seção Open Finance do LEIA-ME.</div>` : ''}
           <button class="btn" id="precheck">${icon('sync')}Verificar de novo</button></div>`;
       } else {
         top = `<div class="card">
@@ -175,6 +188,15 @@ Views.bancos = (() => {
   function bind(root) {
     const pm = $('#pmode', root); if (pm) pm.onchange = async () => { await Store.setMeta('pluggy_mode', pm.checked ? 'direto' : 'nuvem'); Object.keys(cache).forEach((k) => delete cache[k]); srv.checked = false; App.render(); };
     const rc = $('#precheck', root); if (rc) rc.onclick = () => { srv.checked = false; App.render(); };
+    const sk = $('#sksave', root);
+    if (sk) sk.onclick = async () => {
+      const id = $('#skid', root).value.trim(), sec = $('#sksec', root).value.trim();
+      if (!id || !sec) return UI.toast('Preencha o Client ID e o Client Secret.', 'error');
+      sk.disabled = true;
+      try { await OpenFinance.setServerKeys(id, sec); UI.toast('Chaves conferidas e salvas no servidor ✔', 'ok', 5000); srv.checked = false; }
+      catch (e) { UI.toast(e.message, 'error', 8000); }
+      finally { sk.disabled = false; App.render(); }
+    };
     const pc = $('#pconnect', root);
     if (pc) pc.onclick = async () => {
       pc.disabled = true;

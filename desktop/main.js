@@ -44,14 +44,14 @@ let win = null;
 function createWindow() {
   win = new BrowserWindow({
     width: 1320, height: 860, minWidth: 380, minHeight: 560,
-    title: 'Finanças Pessoais', backgroundColor: '#f4f6fb', autoHideMenuBar: true,
+    title: 'Vorticis Finanças Pessoais', backgroundColor: '#f4f6fb', autoHideMenuBar: true,
     icon: path.join(__dirname, 'icon.ico'),
     webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, spellcheck: false, preload: path.join(__dirname, 'preload.js') },
   });
   win.loadURL('app://financas/index.html');
   win.webContents.on('did-fail-load', (e, code, desc, url) => {
     log('falha ao carregar', code, desc, url);
-    dialog.showErrorBox('Finanças Pessoais', 'Não foi possível abrir a interface (' + desc + ').\nDetalhes em: ' + path.join(app.getPath('userData'), 'registro.txt'));
+    dialog.showErrorBox('Vorticis Finanças Pessoais', 'Não foi possível abrir a interface (' + desc + ').\nDetalhes em: ' + path.join(app.getPath('userData'), 'registro.txt'));
   });
   win.webContents.on('render-process-gone', (e, d) => { log('interface encerrada:', d.reason, d.exitCode); if (d.reason !== 'clean-exit') win.reload(); });
   win.webContents.on('console-message', (e, ...a) => { const m = a[0] && a[0].message ? a[0] : { level: a[0], message: a[1] }; if (m.level === 'error' || m.level === 3) log('console:', m.message); });

@@ -16,7 +16,7 @@ Views.painel = {
     if (!accs.length) {
       return `<div class="card" style="max-width:640px;margin:24px auto;text-align:center;padding:32px">
         <img src="icons/icon-192.png" width="80" height="80" alt="" style="border-radius:20px;box-shadow:0 14px 30px -10px rgba(79,70,229,.6)">
-        <h2 style="margin:14px 0 6px">Bem-vindo(a) ao Finanças Pessoais</h2>
+        <h2 style="margin:14px 0 6px">Bem-vindo(a) ao Vorticis Finanças Pessoais</h2>
         <p class="muted">Comece cadastrando suas contas bancárias, carteira e cartões de crédito. Depois lance receitas e despesas ou importe extratos do seu banco (OFX, CSV, Excel ou PDF).</p>
         <div class="row" style="justify-content:center;margin-top:16px"><button class="btn primary" data-a="newacc">${UI.icon('plus')}Criar primeira conta</button><button class="btn" data-a="sample">Ver com dados de exemplo</button></div>
         <p class="small muted" style="margin-top:18px">Seus dados ficam guardados neste aparelho. Para usar no computador e no celular ao mesmo tempo, ative a sincronização em <a href="#/config">Configurações</a>.</p></div>`;

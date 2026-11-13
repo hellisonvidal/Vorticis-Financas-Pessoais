@@ -205,13 +205,13 @@ jobs:
         with:
           tag_name: ${{ steps.v.outputs.tag }}
           target_commitish: ${{ github.sha }}
-          name: Finanças Pessoais ${{ steps.v.outputs.tag }}
+          name: Vorticis Finanças Pessoais ${{ steps.v.outputs.tag }}
           make_latest: true
           body: |
             ${{ github.event.head_commit.message }}
 
             ---
-            **Windows:** `FinancasPessoais-Instalador-*.exe` (instala com atalho) ou `FinancasPessoais-Portatil-*.exe` (roda sem instalar).
+            **Windows:** `VorticisFinancasPessoais-Instalador-*.exe` (instala com atalho) ou `VorticisFinancasPessoais-Portatil-*.exe` (roda sem instalar).
             **Android:** `VorticisFinancasPessoais.apk` (instale por cima da versão anterior; seus dados são mantidos).
             Passo a passo de instalação e sincronização no arquivo LEIA-ME.md.
           files: saida/*

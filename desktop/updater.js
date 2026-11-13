@@ -31,7 +31,7 @@ function setup(getWin, log) {
   }
 
   async function latestRelease() {
-    const r = await net.fetch(RELEASES_URL, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'FinancasPessoais' } });
+    const r = await net.fetch(RELEASES_URL, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'VorticisFinancasPessoais' } });
     if (!r.ok) throw new Error('GitHub respondeu ' + r.status);
     return r.json();
   }
