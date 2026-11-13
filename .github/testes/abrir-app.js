@@ -9,6 +9,25 @@ const { chromium } = require('playwright-core');
       const b = await chromium.connectOverCDP('http://127.0.0.1:' + port);
       const p = b.contexts().flatMap((c) => c.pages())[0];
       await p.waitForSelector('nav a', { timeout: 20000 }); await p.waitForTimeout(800);
+      if (mode === 'atualizar' || mode === 'atualizar-portatil') {
+        const u = await p.evaluate(async (mode) => {
+          const out = { modo: await Updater.mode() };
+          await Updater.check(); out.verificacao = Updater.state.status; out.ultima = Updater.state.latest;
+          if (Updater.state.status !== 'available') return { ...out, erro: Updater.state.error };
+          const t0 = Date.now();
+          await Updater.download(); // só termina quando o download acaba (ou falha)
+          out.segundos = Math.round((Date.now() - t0) / 1000);
+          out.download = Updater.state.status; out.erro = Updater.state.error;
+          if (mode === 'atualizar' && out.download === 'ready') { Updater.install(); out.instalar = 'pedido'; }
+          return out;
+        }, mode);
+        console.log('ATUALIZACAO ' + JSON.stringify(u));
+        const esperado = mode === 'atualizar' ? 'instalado' : 'portatil';
+        const ok = u.modo === esperado && u.verificacao === 'available' && u.ultima === '9.9.9' && u.download === 'ready';
+        if (!ok) console.error('Falha na atualização dentro do app');
+        try { await b.close(); } catch (e) { /* o app pode já ter fechado para instalar */ }
+        process.exit(ok ? 0 : 1);
+      }
       const r = await p.evaluate(async (mode) => {
         const idb = await new Promise((res) => { const q = indexedDB.open('financas-pessoais', 1); q.onsuccess = () => { q.result.close(); res('ok'); }; q.onerror = () => res('ERRO: ' + q.error); });
         if (mode === 'antigo') await Store.upsert('accounts', { id: 'teste-migracao', name: 'Dado da versão anterior', type: 'corrente', initial_balance: 777 });

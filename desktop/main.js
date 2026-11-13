@@ -77,6 +77,8 @@ ipcMain.handle('http', async (e, req) => {
   return { status: res.status, body: await res.text() };
 });
 
+require('./updater').setup(() => win, log);
+
 app.whenReady().then(() => {
   log('iniciando versão', app.getVersion(), 'em', app.getAppPath());
   // Lê os arquivos da interface direto do pacote (não depende do caminho de instalação)

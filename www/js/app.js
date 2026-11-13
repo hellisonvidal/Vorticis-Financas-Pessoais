@@ -105,6 +105,16 @@ const App = (() => {
     updateSyncBadge(Sync.state);
     render();
     Sync.start();
+    // atualização dentro do app: faixa no topo quando houver versão nova
+    const bar = $('#updbar');
+    Updater.bindPanel(bar);
+    Updater.on((st) => {
+      const show = ['available', 'downloading', 'ready', 'installing'].includes(st.status) && !(st.status === 'available' && Store.getMeta('upd_snooze') === st.latest) || (st.status === 'error' && bar.dataset.active === '1');
+      bar.hidden = !show; bar.dataset.active = show ? '1' : '';
+      if (show) bar.innerHTML = `<div class="updin">${UI.icon('sync')}<div class="updtx">${Updater.panel({ compact: true })}</div>${st.status === 'available' ? '<button class="iconbtn" data-upd="later" title="Lembrar depois" aria-label="Fechar">' + UI.icon('x') + '</button>' : ''}</div>`;
+      if (state.route === 'config' && !UI.hasModal()) { const p = document.getElementById('updpanel'); if (p) p.innerHTML = Updater.panel(); }
+    });
+    setTimeout(() => Updater.autoCheck().catch(() => {}), 5000);
     // fecha janelas com Esc
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') UI.closeTop(); });
     // re-renderiza o que ficou pendente quando a janela fechar

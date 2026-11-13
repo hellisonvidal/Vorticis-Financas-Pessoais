@@ -281,6 +281,14 @@ h3.muted { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; fo
 .note.warn { background: color-mix(in srgb, var(--warn) 10%, var(--card)); border-color: color-mix(in srgb, var(--warn) 30%, transparent); }
 .note svg.i { color: var(--accent); margin-top: 2px; } .note.warn svg.i { color: var(--warn); }
 
+/* faixa de atualização */
+.updbar { margin: 0 32px 14px; }
+.updbar .updin { display: flex; gap: 12px; align-items: flex-start; background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); border-radius: 14px; padding: 10px 12px 10px 14px; }
+.updbar .updin > svg.i { color: var(--accent); margin-top: 2px; }
+.updbar .updtx { flex: 1; min-width: 0; }
+.updbar .updtx .row { margin-top: 6px !important; }
+@media (max-width: 900px) { .updbar { margin: 0 14px 12px; } }
+
 /* ---------- celular / tablet ---------- */
 @media (max-width: 1100px) {
   .hero-row { grid-template-columns: minmax(0, 1fr); }

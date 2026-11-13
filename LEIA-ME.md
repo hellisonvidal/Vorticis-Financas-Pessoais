@@ -84,6 +84,15 @@ Se aparecer **"O Windows protegeu o computador"**, clique em **Mais informaçõe
 
 Cada versão é **testada automaticamente** num Windows do GitHub antes de ser publicada: o processo instala, abre o app, confere a tela, testa a versão portátil e desinstala.
 
+### Atualizar pelo próprio app
+A partir da versão 1.0.13, o app verifica sozinho se há versão nova ao abrir (no máximo a cada 6 horas). Quando houver, aparece uma faixa no topo com **Baixar e instalar**. Também dá para verificar em **Configurações → Atualizações**.
+- **Windows (instalado):** baixa a nova versão, confere o arquivo, fecha e reabre já atualizado.
+- **Windows (portátil):** baixa o novo `.exe` portátil na mesma pasta e abre a versão nova. O arquivo antigo pode ser apagado depois.
+- **Android:** baixa o novo APK dentro do app e abre o instalador do Android. Na primeira vez, permita **"Instalar apps desconhecidos"** para o Finanças Pessoais.
+- **Seus dados são mantidos** em todos os casos.
+
+Quem está numa versão anterior à 1.0.13 precisa instalar a 1.0.13 manualmente uma vez. Depois disso, as atualizações são feitas pelo app.
+
 ### Versão web (opcional)
 O workflow pode publicar a pasta `www` no **GitHub Pages** (exige repositório público ou plano pago). Para ativar: em **Settings → Pages**, escolha *Source: GitHub Actions*; depois, em **Settings → Secrets and variables → Actions → Variables**, crie `PUBLICAR_WEB` com valor `true`. O endereço aparece em Settings → Pages. Por ele, dá para **instalar como app** pelo Chrome/Edge, inclusive no celular.
 
@@ -158,12 +167,14 @@ www/                 interface (HTML/CSS/JS puro, sem build), usada pelos 3 apps
   js/finance.js      regras: saldos, parcelas, faturas, orçamentos, categorização
   js/debts.js        endividamento: indicadores, plano de quitação, leitura do Registrato (SCR)
   js/openfinance.js  Open Finance via Pluggy (contas, lançamentos, empréstimos)
+  js/updater.js      atualização dentro do app (Windows, Android)
   js/importers.js    OFX, CSV, Excel, PDF e texto
   js/reports.js      relatórios → tela, PDF (jsPDF), Excel (SheetJS), CSV
   vendor/            bibliotecas locais (funciona offline)
-desktop/             Electron (Windows)
+desktop/             Electron (Windows) + atualizador (updater.js)
 capacitor.config.json, package.json   Capacitor (Android)
 supabase/schema.sql  tabela, segurança (RLS) e regra de conflito
+assets/icone/        gerador do ícone (família Vorticis)
 .github/workflows/   compilação automática do APK e do EXE
 ```
 

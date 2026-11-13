@@ -2,7 +2,7 @@
 /* Configurações: sincronização, backup, segurança, aparência e dados */
 Views.config = (() => {
   const { $, $$, icon } = UI;
-  const VERSION = '1.1.0'; // substituída pelo número da compilação no GitHub
+  const VERSION = window.APP_VERSION || '1.1.0';
   function render() {
     const c = Sync.cfg(); const s = Sync.session(); const st = Sync.state;
     const last = Store.getMeta('sb_last');
@@ -41,6 +41,12 @@ Views.config = (() => {
       <div class="row" style="margin-top:10px"><span>Tema</span><span class="spacer"></span><div class="seg" id="theme">${[['auto', 'Automático'], ['light', 'Claro'], ['dark', 'Escuro']].map(([k, v]) => `<button data-v="${k}" class="${theme === k ? 'on' : ''}">${v}</button>`).join('')}</div></div>
       <label class="field" style="margin-top:12px"><span>Nome do titular (aparece no cabeçalho dos PDFs)</span><input class="input" id="owner" value="${U.esc(Store.getMeta('owner_name') || '')}"></label>
       ${App.installEvt ? `<button class="btn primary" id="install" style="margin-top:12px">Instalar como aplicativo</button>` : ''}
+    </div>
+    <div class="card">
+      <h3>${icon('sync')} Atualizações</h3>
+      <div id="updpanel">${Updater.panel()}</div>
+      <label class="check small" style="margin-top:12px"><input type="checkbox" id="updauto" ${Store.getMeta('upd_auto', true) !== false ? 'checked' : ''}> Verificar automaticamente ao abrir o app</label>
+      <p class="small muted" style="margin-bottom:0">${U.isNative() ? 'O app baixa a nova versão e abre o instalador do Android. Seus dados são mantidos.' : navigator.userAgent.includes('Electron') ? 'O app baixa a nova versão, fecha e abre de novo já atualizado. Seus dados são mantidos.' : 'Na versão web, basta recarregar a página para usar a versão mais recente.'}</p>
     </div>
     <div class="card">
       <h3>Dados</h3>
@@ -123,6 +129,9 @@ Views.config = (() => {
       if (!(await UI.confirm(`Excluir os ${ids.length} lançamento(s) desta importação?`, { ok: 'Excluir', danger: true }))) return;
       await Store.removeMany('transactions', ids); UI.toast('Importação desfeita', 'ok'); App.render();
     }));
+    const up = $('#updpanel', root); if (up) Updater.bindPanel(up);
+    const ua = $('#updauto', root); if (ua) ua.onchange = () => Store.setMeta('upd_auto', ua.checked);
+    if (Updater.state.mode === null) Updater.mode().then(() => { const p = $('#updpanel', root); if (p) p.innerHTML = Updater.panel(); }).catch(() => {});
     on('dsample', async () => {
       if (F.accounts(true).some((a) => a.sample) && !(await UI.confirm('Os dados de exemplo já foram carregados. Carregar novamente (duplica)?'))) return;
       await Sample.load(); UI.toast('Dados de exemplo carregados', 'ok'); App.go('painel');

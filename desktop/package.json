@@ -25,6 +25,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "updater.js",
       "icon.ico",
       "www/**/*"
     ],
@@ -48,6 +49,17 @@
     },
     "portable": {
       "artifactName": "FinancasPessoais-Portatil-${version}.${ext}"
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "hellisonvidal",
+        "repo": "Vorticis-Financas-Pessoais",
+        "releaseType": "release"
+      }
+    ]
+  },
+  "dependencies": {
+    "electron-updater": "6.6.2"
   }
 }

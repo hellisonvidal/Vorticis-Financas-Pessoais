@@ -1,8 +1,8 @@
 /* Service worker: permite usar o app sem internet (versão web/PWA). */
-const CACHE = 'financas-v1.2.0';
+const CACHE = 'financas-v1.3.0';
 const FILES = [
-  './', './index.html', './manifest.webmanifest', './config.js', './css/app.css',
-  './js/util.js', './js/store.js', './js/sync.js', './js/finance.js', './js/debts.js', './js/openfinance.js', './js/charts.js', './js/importers.js', './js/reports.js', './js/sample.js',
+  './', './index.html', './manifest.webmanifest', './config.js', './version.js', './css/app.css',
+  './js/util.js', './js/store.js', './js/sync.js', './js/finance.js', './js/debts.js', './js/openfinance.js', './js/updater.js', './js/charts.js', './js/importers.js', './js/reports.js', './js/sample.js',
   './js/ui.js', './js/app.js', './js/views/painel.js', './js/views/lancamentos.js', './js/views/contas.js', './js/views/cadastros.js',
   './js/views/importar.js', './js/views/relatorios.js', './js/views/dividas.js', './js/views/bancos.js', './js/views/config.js',
   './vendor/xlsx.full.min.js', './vendor/jspdf.umd.min.js', './vendor/jspdf.plugin.autotable.min.js', './vendor/pdf.min.js', './vendor/pdf.worker.min.js',
