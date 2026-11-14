@@ -55,8 +55,14 @@ function createWindow() {
   });
   win.webContents.on('render-process-gone', (e, d) => { log('interface encerrada:', d.reason, d.exitCode); if (d.reason !== 'clean-exit') win.reload(); });
   win.webContents.on('console-message', (e, ...a) => { const m = a[0] && a[0].message ? a[0] : { level: a[0], message: a[1] }; if (m.level === 'error' || m.level === 3) log('console:', m.message); });
-  // links externos abrem no navegador padrão
+  // Janelas da Pluggy (autorização do Open Finance/MeuPluggy) abrem DENTRO do app, como num navegador:
+  // assim a resposta da autorização volta para a tela de conexão. Os demais links abrem no navegador padrão.
   win.webContents.setWindowOpenHandler(({ url }) => {
+    if (isPluggyUrl(url) || process.env.FP_TESTE_POPUP && url.startsWith(process.env.FP_TESTE_POPUP)) {
+      return { action: 'allow', overrideBrowserWindowOptions: {
+        width: 520, height: 760, parent: win, autoHideMenuBar: true, title: 'Conectar banco', backgroundColor: '#ffffff', icon: path.join(__dirname, 'icon.ico'),
+        webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false } } };
+    }
     if (/^https?:/i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
@@ -64,6 +70,21 @@ function createWindow() {
     if (!url.startsWith('app://')) { e.preventDefault(); if (/^https?:/i.test(url)) shell.openExternal(url); }
   });
 }
+
+const isPluggyUrl = (u) => { try { const h = new URL(u); return h.protocol === 'https:' && /(^|\.)pluggy\.ai$/i.test(h.hostname); } catch (e) { return false; } };
+// Dentro da janela de autorização a navegação é livre (o MeuPluggy/banco pode redirecionar para páginas de login),
+// mas novas janelas que ela tentar abrir fora da Pluggy vão para o navegador padrão.
+app.on('web-contents-created', (e, wc) => {
+  if (wc.getType() !== 'window') return;
+  wc.once('did-start-navigation', () => {
+    if (win && wc.id === win.webContents.id) return;
+    wc.setWindowOpenHandler(({ url }) => {
+      if (isPluggyUrl(url)) return { action: 'allow', overrideBrowserWindowOptions: { parent: win, autoHideMenuBar: true, webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false } } };
+      if (/^https?:/i.test(url)) shell.openExternal(url);
+      return { action: 'deny' };
+    });
+  });
+});
 
 app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
 

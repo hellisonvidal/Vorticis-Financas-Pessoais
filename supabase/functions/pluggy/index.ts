@@ -34,14 +34,14 @@ async function pluggyAuth(clientId: string, clientSecret: string) {
   const j = await r.json().catch(() => ({}));
   return { ok: r.ok && !!j.apiKey, status: r.status, apiKey: j.apiKey as string };
 }
-let apiKey = '', apiKeyExp = 0;
+let apiKey = '', apiKeyExp = 0, apiKeyFor = '';
 async function key(): Promise<string> {
-  if (apiKey && Date.now() < apiKeyExp) return apiKey;
   const c = await getCreds();
   if (!c) throw new HttpErr(503, 'As chaves da Pluggy ainda não foram cadastradas. Abra Open Finance no app e informe o Client ID e o Client Secret.');
+  if (apiKey && apiKeyFor === c.clientId + ':' + c.clientSecret && Date.now() < apiKeyExp) return apiKey;
   const r = await pluggyAuth(c.clientId, c.clientSecret);
   if (!r.ok) throw new HttpErr(502, 'A Pluggy recusou as chaves cadastradas (' + r.status + '). Cadastre-as de novo em Open Finance.');
-  apiKey = r.apiKey; apiKeyExp = Date.now() + 100 * 60_000;
+  apiKey = r.apiKey; apiKeyExp = Date.now() + 100 * 60_000; apiKeyFor = c.clientId + ':' + c.clientSecret;
   return apiKey;
 }
 async function pluggy(method: string, path: string, body?: unknown, params?: Record<string, string | undefined>) {
@@ -97,7 +97,7 @@ Deno.serve(async (req) => {
       const now = new Date().toISOString();
       const { error } = await admin().from('fin_server_config').upsert([{ key: 'pluggy_client_id', value: clientId, updated_at: now }, { key: 'pluggy_client_secret', value: clientSecret, updated_at: now }]);
       if (error) throw new HttpErr(500, 'Não foi possível salvar as chaves: ' + error.message);
-      creds = { clientId, clientSecret }; credsAt = Date.now(); apiKey = r.apiKey; apiKeyExp = Date.now() + 100 * 60_000;
+      creds = { clientId, clientSecret }; credsAt = Date.now(); apiKey = r.apiKey; apiKeyExp = Date.now() + 100 * 60_000; apiKeyFor = clientId + ':' + clientSecret;
       return json(200, { ok: true, configured: true });
     }
 

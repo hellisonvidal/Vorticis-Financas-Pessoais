@@ -160,7 +160,7 @@ const OpenFinance = (() => {
     return new Promise((resolve, reject) => {
       let done = false;
       const pc = new PluggyConnect({
-        connectToken: accessToken, language: 'pt', theme: dark ? 'dark' : 'light', countries: ['BR'], forceOauthInBrowser: true, allowFullscreen: true,
+        connectToken: accessToken, language: 'pt', theme: dark ? 'dark' : 'light', countries: ['BR'], forceOauthInBrowser: U.isNative(), // no Windows a autorização abre numa janela do próprio app allowFullscreen: true,
         ...(updateItem ? { updateItem } : {}),
         onSuccess: async ({ item }) => { done = true; try { const r = await registerItem(item.id); resolve({ item: { ...item, ...r } }); } catch (e) { reject(e); } },
         onError: (e) => { if (!done) { done = true; reject(new Error((e && e.message) || 'Não foi possível conectar o banco.')); } },
