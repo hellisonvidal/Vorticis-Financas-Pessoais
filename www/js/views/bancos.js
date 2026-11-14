@@ -89,8 +89,12 @@ Views.bancos = (() => {
           ${U.isNative() ? `<div class="note warn" style="margin:12px 0">${icon('alert')}<div><b>No celular, a autorização do banco pode não voltar para o app.</b> Se a tela da Pluggy mostrar erro, faça a conexão pelo <b>app do Windows</b> (as conexões aparecem aqui automaticamente) ou vincule pelo ID logo abaixo.</div></div>` : ''}
           ${items.length ? items.map(itemCard).join('') : `<div class="empty">Nenhum banco conectado ainda.<br>Toque em <b>Conectar banco</b>, escolha <b>MeuPluggy</b> (ou o seu banco) e autorize.</div>`}
           <label class="check small" style="margin-top:12px"><input type="checkbox" id="pauto" ${Store.getMeta('pluggy_autosync', true) !== false ? 'checked' : ''}> Sincronizar automaticamente ao abrir o app (no máximo a cada 6 horas)</label>
-          ${srv.canLink ? `<details style="margin-top:10px"${U.isNative() ? ' open' : ''}><summary class="small muted" style="cursor:pointer">Já conectei um banco no Meu Pluggy: vincular pelo ID</summary>
-            <p class="small muted" style="margin:8px 0 0">Em dashboard.pluggy.ai, conecte o MeuPluggy pela aplicação <b>Demo</b> e copie o ID da conexão criada.</p>
+          ${srv.canLink ? `<details style="margin-top:10px" open><summary class="small" style="cursor:pointer"><b>Se a tela da Pluggy mostrar "Um erro inesperado ocorreu": conecte pelo site e vincule pelo ID</b></summary>
+            <ol class="small muted" style="margin:8px 0 0;padding-left:20px;line-height:1.6">
+              <li>Em <b>meu.pluggy.ai</b>, entre (ou crie a conta grátis) e conecte os seus bancos.</li>
+              <li>Em <b>dashboard.pluggy.ai</b>, abra <b>Demo</b>, escolha o conector <b>MeuPluggy</b> (não o do banco) e entre com a mesma conta do Meu Pluggy. Faça isso uma vez para cada banco.</li>
+              <li>Copie o <b>ID da conexão</b> (itemId) que o painel mostra, cole abaixo e toque em Vincular. O app importa os lançamentos na hora.</li>
+            </ol>
             <div class="row" style="margin-top:8px"><input class="input" id="pitem" placeholder="ID da conexão (item)" style="width:320px;max-width:100%" spellcheck="false"><button class="btn" id="padd">${icon('plus')}Vincular</button></div></details>` : ''}
         </div>`;
       }
@@ -244,7 +248,7 @@ Views.bancos = (() => {
       const go = async () => {
         const v = $('#pitem', root).value.trim(); if (!v) return UI.toast('Cole o ID da conexão.', 'error');
         add.disabled = true;
-        try { const it = await OpenFinance.addItem(v); UI.toast(`Conexão adicionada: ${(it.connector && it.connector.name) || 'banco'}`, 'ok'); await load(it.id); }
+        try { const it = await OpenFinance.addItem(v); UI.toast(`Conexão adicionada: ${(it.connector && it.connector.name) || 'banco'}. Importando lançamentos…`, 'ok'); if (OpenFinance.cloud()) await runSync(it.id); await load(it.id); }
         catch (e) { UI.toast(e.message, 'error', 7000); add.disabled = false; }
       };
       add.onclick = go; $('#pitem', root).onkeydown = (e) => { if (e.key === 'Enter') go(); };
