@@ -18,6 +18,21 @@ Views.bancos = (() => {
     srv.checked = true; srv.loading = false; App.render();
   }
 
+  let syncing = '';
+  async function runSync(itemId) {
+    if (syncing) return;
+    syncing = 'Sincronizando…'; App.render();
+    try {
+      const prog = { onProgress: (n) => { syncing = 'Sincronizando ' + n + '…'; App.render(); } };
+      let r;
+      if (itemId) { const it = OpenFinance.items().find((x) => x.id === itemId) || {}; r = await OpenFinance.syncAll(itemId, { connector: { name: it.name } }, prog); }
+      else { r = await OpenFinance.syncEverything(prog); if (r.erros.length) UI.toast(r.erros.join(' | '), 'error', 9000); }
+      UI.toast('Sincronizado: ' + OpenFinance.resumo(r), 'ok', 7000);
+      Object.keys(cache).forEach((k) => delete cache[k]);
+    } catch (e) { UI.toast(e.message, 'error', 8000); }
+    finally { syncing = ''; App.render(); }
+  }
+
   function render() {
     const cloud = OpenFinance.cloud();
     const web = !U.isNative() && !globalThis.desktop;
@@ -69,9 +84,13 @@ Views.bancos = (() => {
       } else {
         top = `<div class="card">
           <div class="row between"><div><h3 style="margin:0">Seus bancos</h3><span class="small muted">Conectado como ${U.esc((Sync.session() || {}).user ? Sync.session().user.email : '')} • as conexões aparecem em todos os seus aparelhos</span></div>
-            <button class="btn primary" id="pconnect">${icon('plus')}Conectar banco</button></div>
-          ${items.length ? items.map(itemCard).join('') : `<div class="empty">Nenhum banco conectado ainda.<br>Toque em <b>Conectar banco</b>, escolha a instituição e autorize no app do seu banco.</div>`}
-          ${srv.canLink ? `<details style="margin-top:10px"><summary class="small muted" style="cursor:pointer">Já conectei um banco no Meu Pluggy: vincular pelo ID</summary>
+            <div class="row">${items.length ? `<button class="btn" id="psyncall" ${syncing ? 'disabled' : ''}>${icon('sync')}${syncing ? 'Sincronizando…' : 'Sincronizar tudo'}</button>` : ''}<button class="btn primary" id="pconnect">${icon('plus')}Conectar banco</button></div></div>
+          ${syncing ? `<p class="small muted">${U.esc(syncing)}</p>` : ''}
+          ${U.isNative() ? `<div class="note warn" style="margin:12px 0">${icon('alert')}<div><b>No celular, a autorização do banco pode não voltar para o app.</b> Se a tela da Pluggy mostrar erro, faça a conexão pelo <b>app do Windows</b> (as conexões aparecem aqui automaticamente) ou vincule pelo ID logo abaixo.</div></div>` : ''}
+          ${items.length ? items.map(itemCard).join('') : `<div class="empty">Nenhum banco conectado ainda.<br>Toque em <b>Conectar banco</b>, escolha <b>MeuPluggy</b> (ou o seu banco) e autorize.</div>`}
+          <label class="check small" style="margin-top:12px"><input type="checkbox" id="pauto" ${Store.getMeta('pluggy_autosync', true) !== false ? 'checked' : ''}> Sincronizar automaticamente ao abrir o app (no máximo a cada 6 horas)</label>
+          ${srv.canLink ? `<details style="margin-top:10px"${U.isNative() ? ' open' : ''}><summary class="small muted" style="cursor:pointer">Já conectei um banco no Meu Pluggy: vincular pelo ID</summary>
+            <p class="small muted" style="margin:8px 0 0">Em dashboard.pluggy.ai, conecte o MeuPluggy pela aplicação <b>Demo</b> e copie o ID da conexão criada.</p>
             <div class="row" style="margin-top:8px"><input class="input" id="pitem" placeholder="ID da conexão (item)" style="width:320px;max-width:100%" spellcheck="false"><button class="btn" id="padd">${icon('plus')}Vincular</button></div></details>` : ''}
         </div>`;
       }
@@ -97,6 +116,7 @@ Views.bancos = (() => {
         <div><h4 style="margin:0;font-size:16px">${U.esc((c.item && c.item.connector && c.item.connector.name) || it.name)}</h4>
           <span class="small muted">Conexão ${U.esc(it.id.slice(0, 8))}… • atualizado em ${dt((c.item && c.item.lastUpdatedAt) || it.lastUpdatedAt)}${c.item && c.item.consentExpiresAt ? ' • consentimento até ' + dt(c.item.consentExpiresAt).slice(0, 10) : ''}</span></div>
         <div class="row"><span class="badge ${st[0]}">${st[1]}</span>
+          <button class="btn sm primary" data-syncitem="${it.id}" ${syncing ? 'disabled' : ''}>${icon('sync')}Sincronizar</button>
           <button class="btn sm" data-load="${it.id}">${icon('sync')}${c.accounts ? 'Recarregar' : 'Carregar contas'}</button>
           <button class="btn sm" data-refresh="${it.id}" title="Pedir ao banco dados novos">Atualizar no banco</button>
           ${OpenFinance.cloud() ? `<button class="btn sm" data-reconnect="${it.id}" title="Renovar a autorização no banco">Reconectar</button>` : ''}
@@ -202,7 +222,7 @@ Views.bancos = (() => {
       pc.disabled = true;
       try {
         const r = await OpenFinance.connect();
-        if (r && r.item) { UI.toast(`Banco conectado: ${(r.item.connector && r.item.connector.name) || r.item.name || ''}. Carregando contas…`, 'ok', 5000); await load(r.item.id); }
+        if (r && r.item) { UI.toast(`Banco conectado: ${(r.item.connector && r.item.connector.name) || r.item.name || ''}. Importando lançamentos…`, 'ok', 5000); pc.disabled = false; await runSync(r.item.id); await load(r.item.id); }
       } catch (e) { UI.toast(e.message, 'error', 8000); }
       finally { pc.disabled = false; App.render(); }
     };
@@ -230,6 +250,9 @@ Views.bancos = (() => {
       add.onclick = go; $('#pitem', root).onkeydown = (e) => { if (e.key === 'Enter') go(); };
     }
     $$('[data-load]', root).forEach((b) => (b.onclick = () => load(b.dataset.load)));
+    $$('[data-syncitem]', root).forEach((b) => (b.onclick = () => runSync(b.dataset.syncitem)));
+    const sa = $('#psyncall', root); if (sa) sa.onclick = () => runSync(null);
+    const pa = $('#pauto', root); if (pa) pa.onchange = () => Store.setMeta('pluggy_autosync', pa.checked);
     $$('[data-refresh]', root).forEach((b) => (b.onclick = async () => {
       b.disabled = true;
       try { const it = await OpenFinance.refreshItem(b.dataset.refresh); if (it) await OpenFinance.saveItemInfo(it); UI.toast('Atualização pedida ao banco. Em alguns minutos clique em "Recarregar".', 'ok', 6000); if (it) { cache[b.dataset.refresh] = { ...(cache[b.dataset.refresh] || {}), item: it }; } App.render(); }
@@ -261,5 +284,5 @@ Views.bancos = (() => {
     OpenFinance.items().forEach((it) => { if (!cache[it.id] && OpenFinance.configured()) { cache[it.id] = { loading: true }; setTimeout(() => load(it.id), 0); } });
   }
 
-  return { title: 'Open Finance', render, bind, live: false };
+  return { title: 'Open Finance', render, bind, live: false, runSync };
 })();

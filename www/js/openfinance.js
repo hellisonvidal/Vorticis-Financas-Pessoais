@@ -22,7 +22,13 @@ const OpenFinance = (() => {
       throw e;
     }
   }
-  const links = () => Store.getMeta('pluggy_links', {});
+  /** Vínculo conta do banco → conta do app. Fica gravado na própria conta (sincroniza entre aparelhos);
+   *  o mapa local antigo (pluggy_links) continua valendo para quem já vinculou. */
+  function links() {
+    const m = { ...Store.getMeta('pluggy_links', {}) };
+    F.accounts(true).forEach((a) => { if (a.pluggy_account_id) m[a.pluggy_account_id] = a.id; });
+    return m;
+  }
   let apiKey = null, apiKeyExp = 0;
 
   async function setConfig(clientId, clientSecret) {
@@ -146,7 +152,79 @@ const OpenFinance = (() => {
     }
     return Store.upsert('accounts', rec);
   }
-  async function link(pluggyAccId, localId) { const l = { ...links() }; if (localId) l[pluggyAccId] = localId; else delete l[pluggyAccId]; await Store.setMeta('pluggy_links', l); }
+  async function link(pluggyAccId, localId) {
+    const l = { ...Store.getMeta('pluggy_links', {}) }; if (localId) l[pluggyAccId] = localId; else delete l[pluggyAccId]; await Store.setMeta('pluggy_links', l);
+    // grava o vínculo na conta (e tira de outra conta que estivesse com ele)
+    const recs = F.accounts(true).filter((a) => a.pluggy_account_id === pluggyAccId && a.id !== localId).map((a) => ({ ...a, pluggy_account_id: null }));
+    const alvo = localId && Store.get('accounts', localId);
+    if (alvo && alvo.pluggy_account_id !== pluggyAccId) recs.push({ ...alvo, pluggy_account_id: pluggyAccId });
+    if (recs.length) await Store.upsertMany('accounts', recs);
+  }
+
+  /** Saldo que o banco informa, no formato do app (cartão: valor devido fica negativo) */
+  const bankBalance = (a) => (typeof a.balance === 'number' ? Math.round(a.balance * 100) * (a.type === 'CREDIT' ? -1 : 1) : null);
+
+  /**
+   * Sincroniza uma conexão inteira de uma vez: cria/vincula as contas, importa os lançamentos novos
+   * (sem duplicar) e, nas contas criadas agora, acerta o saldo inicial para bater com o banco.
+   */
+  async function syncAll(itemId, item, { onProgress } = {}) {
+    const accounts = await fetchAccounts(itemId);
+    const res = { contas: 0, novos: 0, criadas: 0, possiveis: 0, pendentes: 0 };
+    const learn = () => F.buildLearner();
+    for (const a of accounts) {
+      onProgress && onProgress(accLabel(a));
+      let localId = links()[a.id];
+      let criada = false;
+      if (!localId || !Store.get('accounts', localId)) {
+        const rec = await createLocalAccount(a, item);
+        await link(a.id, rec.id); localId = rec.id; criada = true; res.criadas++;
+      }
+      const sinceMap = { ...Store.getMeta('pluggy_since', {}) };
+      const since = sinceMap[a.id] || U.addDays(U.today(), -90);
+      const txs = await fetchTransactions(a.id, since);
+      const { rows, pending } = rowsFrom(txs);
+      res.pendentes += pending;
+      Importers.markDuplicates(rows, localId);
+      const novos = rows.filter((r) => !r.dup);
+      res.possiveis += rows.filter((r) => r.dup === 'maybe').length;
+      if (novos.length) {
+        const L = learn(); const batch = U.uuid(); const fonte = 'Open Finance • ' + accLabel(a);
+        await Store.upsertMany('transactions', novos.map((r) => ({
+          id: U.uuid(), account_id: localId, date: r.date, description: r.description, amount: Math.abs(r.amount), type: r.amount > 0 ? 'receita' : 'despesa',
+          category_id: L(r.description, r.amount > 0 ? 'receita' : 'despesa') || null, status: 'efetivada', fitid: r.fitid, import_batch: batch, imported_from: fonte,
+        })));
+        const batches = Store.getMeta('import_batches', []); batches.unshift({ id: batch, account_id: localId, file: fonte, count: novos.length, at: new Date().toISOString() }); await Store.setMeta('import_batches', batches.slice(0, 30));
+      }
+      if (criada) {
+        const alvo = bankBalance(a);
+        if (alvo !== null) { const acc = Store.get('accounts', localId); const dif = alvo - F.balance(localId); if (dif) await Store.upsert('accounts', { ...acc, initial_balance: (acc.initial_balance || 0) + dif }); }
+      }
+      sinceMap[a.id] = U.addDays(U.today(), -10); await Store.setMeta('pluggy_since', sinceMap);
+      res.contas++; res.novos += novos.length;
+    }
+    await Store.setMeta('pluggy_last_sync', Date.now());
+    return res;
+  }
+  /** Sincroniza todas as conexões (usado no botão e ao abrir o app) */
+  async function syncEverything(opts) {
+    const its = cloud() ? await loadCloudItems() : items();
+    const tot = { conexoes: 0, contas: 0, novos: 0, criadas: 0, possiveis: 0, pendentes: 0, erros: [] };
+    for (const it of its) {
+      if (it.status === 'ERRO' || it.status === 'LOGIN_ERROR') { tot.erros.push((it.name || 'Banco') + ': precisa reconectar'); continue; }
+      try { const r = await syncAll(it.id, { connector: { name: it.name || (it.connector && it.connector.name) } }, opts); tot.conexoes++; for (const k of ['contas', 'novos', 'criadas', 'possiveis', 'pendentes']) tot[k] += r[k]; }
+      catch (e) { tot.erros.push((it.name || 'Banco') + ': ' + e.message); }
+    }
+    await Store.setMeta('pluggy_last_sync', Date.now());
+    return tot;
+  }
+  function resumo(r) {
+    const p = [`${r.novos} lançamento(s) novo(s)`];
+    if (r.criadas) p.push(`${r.criadas} conta(s) criada(s)`);
+    if (r.possiveis) p.push(`${r.possiveis} possível(is) duplicado(s) deixado(s) de fora`);
+    if (r.pendentes) p.push(`${r.pendentes} pendente(s) no banco`);
+    return p.join(' • ');
+  }
   // ---------- modo nuvem: conexões guardadas no servidor (aparecem em todos os aparelhos) ----------
   const setServerKeys = (clientId, clientSecret) => call('set-keys', { clientId, clientSecret });
   async function loadCloudItems() { const r = await call('items'); cloudItems = (r && r.results) || []; return cloudItems; }
@@ -211,6 +289,6 @@ const OpenFinance = (() => {
     return recs.length;
   }
 
-  return { setServerKeys, mode, cloud, directConfigured, loadCloudItems, connect, configured, cfg, setConfig, clearAll, items, links, link, addItem, removeItem, saveItemInfo, test, fetchItem, fetchAccounts, fetchTransactions, fetchLoans,
+  return { syncAll, syncEverything, resumo, bankBalance, setServerKeys, mode, cloud, directConfigured, loadCloudItems, connect, configured, cfg, setConfig, clearAll, items, links, link, addItem, removeItem, saveItemInfo, test, fetchItem, fetchAccounts, fetchTransactions, fetchLoans,
     refreshItem, rowsFrom, toRow, txDate, accType, accLabel, createLocalAccount, loanToDebt, saveLoans, cents, base };
 })();

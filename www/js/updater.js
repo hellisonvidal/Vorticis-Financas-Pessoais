@@ -80,18 +80,30 @@ const Updater = (() => {
       if (m === 'android') {
         const FS = Capacitor.Plugins.Filesystem;
         if (!state.asset) throw new Error('Arquivo da nova versão não encontrado na página de versões.');
+        // limpa downloads anteriores (pasta antiga e APKs soltos no cache)
         try { await FS.rmdir({ path: 'atualizacao', directory: 'CACHE', recursive: true }); } catch (e) { /* não existia */ }
+        try {
+          const ls = await FS.readdir({ path: '', directory: 'CACHE' });
+          for (const f of (ls && ls.files) || []) { const n = typeof f === 'string' ? f : f.name; if (/^(Vorticis)?FinancasPessoais-.*\.apk$/.test(n)) { try { await FS.deleteFile({ path: n, directory: 'CACHE' }); } catch (e) { /* ignora */ } } }
+        } catch (e) { /* sem listagem */ }
+        // grava direto na raiz do cache: não depende de criar subpastas (o download não cria pastas no Android)
+        const nome = `VorticisFinancasPessoais-${state.latest}.apk`;
         let sub = null;
         try { sub = await FS.addListener('progress', (p) => { if (p.contentLength) set({ percent: Math.min(99, Math.round(p.bytes / p.contentLength * 100)) }); }); } catch (e) { /* sem progresso */ }
-        const r = await FS.downloadFile({ url: state.asset.browser_download_url, path: `atualizacao/VorticisFinancasPessoais-${state.latest}.apk`, directory: 'CACHE', recursive: true, progress: true });
-        if (sub && sub.remove) sub.remove();
-        const st = await FS.stat({ path: `atualizacao/VorticisFinancasPessoais-${state.latest}.apk`, directory: 'CACHE' });
+        let r;
+        try { r = await FS.downloadFile({ url: state.asset.browser_download_url, path: nome, directory: 'CACHE', progress: true }); }
+        finally { if (sub && sub.remove) sub.remove(); }
+        const st = await FS.stat({ path: nome, directory: 'CACHE' });
         if (state.asset.size && st.size !== state.asset.size) throw new Error('Download incompleto. Tente de novo.');
         set({ status: 'ready', percent: 100, file: r.path || st.uri });
         return;
       }
       throw new Error('Neste aparelho a atualização é feita pela página de versões.');
-    } catch (e) { set({ status: 'error', error: e.message || String(e) }); }
+    } catch (e) {
+      const det = String((e && e.message) || e || '');
+      const amigavel = /incompleto|página de versões|não encontrado/i.test(det) ? det : 'Não foi possível baixar a atualização. Tente de novo ou use "Baixar pela página".' + (det ? ' (' + det.replace(/\/data\/[^\s:]+/g, '…').slice(0, 120) + ')' : '');
+      set({ status: 'error', error: amigavel });
+    }
   }
 
   async function install() {
