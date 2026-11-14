@@ -115,6 +115,15 @@ const App = (() => {
       if (state.route === 'config' && !UI.hasModal()) { const p = document.getElementById('updpanel'); if (p) p.innerHTML = Updater.panel(); }
     });
     setTimeout(() => Updater.autoCheck().catch(() => {}), 5000);
+    // Open Finance: traz lançamentos novos dos bancos conectados ao abrir o app (no máximo a cada 6 horas)
+    setTimeout(async () => {
+      try {
+        if (!OpenFinance.cloud() || !Sync.loggedIn() || Store.getMeta('pluggy_autosync', true) === false) return;
+        if (Date.now() - Store.getMeta('pluggy_last_sync', 0) < 6 * 3600 * 1000) return;
+        const r = await OpenFinance.syncEverything();
+        if (r.novos) UI.toast('Open Finance: ' + OpenFinance.resumo(r), 'ok', 7000);
+      } catch (e) { console.warn('sincronização Open Finance', e); }
+    }, 8000);
     // fecha janelas com Esc
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') UI.closeTop(); });
     // re-renderiza o que ficou pendente quando a janela fechar

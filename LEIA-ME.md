@@ -127,6 +127,12 @@ Só instituições autorizadas pelo Banco Central podem receber dados do Open Fi
 
 Não é preciso digitar chave nem ID.
 
+O botão **Sincronizar tudo** cria as contas que faltam e importa os lançamentos novos de todos os bancos de uma vez, sem duplicar. Nas contas criadas por ele, o saldo já fica igual ao do banco. O app também sincroniza sozinho ao abrir, no máximo a cada 6 horas, e isso pode ser desligado na tela Open Finance.
+
+**No celular**, a autorização do banco pode não voltar para o app. Nesse caso:
+- faça a conexão pelo **app do Windows**: a conexão aparece no celular automaticamente;
+- ou vincule pelo ID, conectando o MeuPluggy pela aplicação **Demo** em dashboard.pluggy.ai.
+
 As chaves da Pluggy ficam guardadas **só no seu servidor** (Supabase), numa função chamada `pluggy`. Elas nunca vão dentro do `.exe` ou do `.apk`, que são públicos.
 
 ### Situação atual deste repositório
