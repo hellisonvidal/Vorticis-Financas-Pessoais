@@ -27,6 +27,11 @@ try {
   try { fs.rmSync(USER_DATA + '.migrando', { recursive: true, force: true }); } catch (e2) { /* ignora */ }
 }
 app.setPath('userData', USER_DATA);
+// Identificação do app nas requisições só com caracteres simples: o "ç" do nome ia no cabeçalho
+// User-Agent e o servidor de login (Supabase) recusava gravar a sessão ("Database error granting user").
+app.userAgentFallback = app.userAgentFallback
+  .replace(/Vorticis Finan\S* Pessoais|Vorticis\s*Finan\S*Pessoais/gi, 'VorticisFinancasPessoais')
+  .normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\x20-\x7e]/g, '');
 
 // Registro de erros (ajuda a diagnosticar problemas): %APPDATA%\FinancasPessoais\registro.txt
 function log(...a) {
