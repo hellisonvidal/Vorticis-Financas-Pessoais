@@ -23,6 +23,7 @@ jobs:
       PLUGGY_CLIENT_ID: ${{ secrets.PLUGGY_CLIENT_ID }}
       PLUGGY_CLIENT_SECRET: ${{ secrets.PLUGGY_CLIENT_SECRET }}
       ALLOWED_EMAILS: ${{ secrets.ALLOWED_EMAILS }}
+      PLUGGY_WEBHOOK_SECRET: ${{ secrets.PLUGGY_WEBHOOK_SECRET }}
     steps:
       - uses: actions/checkout@v4
 
@@ -53,16 +54,25 @@ jobs:
         if: steps.chk.outputs.ok == 'true' && env.PLUGGY_CLIENT_ID != '' && env.PLUGGY_CLIENT_SECRET != '' && env.ALLOWED_EMAILS != ''
         run: |
           printf 'PLUGGY_CLIENT_ID=%s\nPLUGGY_CLIENT_SECRET=%s\nALLOWED_EMAILS=%s\n' "$PLUGGY_CLIENT_ID" "$PLUGGY_CLIENT_SECRET" "$ALLOWED_EMAILS" > /tmp/segredos.env
+          if [ -n "${PLUGGY_WEBHOOK_SECRET:-}" ]; then printf 'PLUGGY_WEBHOOK_SECRET=%s\n' "$PLUGGY_WEBHOOK_SECRET" >> /tmp/segredos.env; fi
           npx --yes supabase@2.122.0 secrets set --env-file /tmp/segredos.env --project-ref "$SUPABASE_PROJECT_REF"
           rm -f /tmp/segredos.env
 
-      - name: Publicar a função "pluggy"
+      - name: Publicar as funções "pluggy" e "pluggy-webhook"
         if: steps.chk.outputs.ok == 'true'
-        run: npx --yes supabase@2.122.0 functions deploy pluggy --project-ref "$SUPABASE_PROJECT_REF" --use-api
+        run: |
+          npx --yes supabase@2.122.0 functions deploy pluggy --project-ref "$SUPABASE_PROJECT_REF" --use-api
+          npx --yes supabase@2.122.0 functions deploy pluggy-webhook --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt --use-api
 
-      - name: Testar a função publicada
+      - name: Testar as funções publicadas
         if: steps.chk.outputs.ok == 'true'
         run: |
           code=$(curl -sS -o /tmp/f.json -w '%{http_code}' -X POST "https://$SUPABASE_PROJECT_REF.supabase.co/functions/v1/pluggy" -H 'Content-Type: application/json' -d '{"action":"status"}')
-          echo "HTTP $code (sem login, o esperado é 401)"; cat /tmp/f.json; echo
+          echo "pluggy -> HTTP $code (sem login, o esperado é 401)"; cat /tmp/f.json; echo
           [ "$code" = "401" ]
+
+          wh_header=()
+          if [ -n "${PLUGGY_WEBHOOK_SECRET:-}" ]; then wh_header=(-H "x-webhook-secret: $PLUGGY_WEBHOOK_SECRET"); fi
+          wcode=$(curl -sS -o /tmp/w.json -w '%{http_code}' -X POST "https://$SUPABASE_PROJECT_REF.supabase.co/functions/v1/pluggy-webhook" -H 'Content-Type: application/json' "${wh_header[@]}" -d '{"event":"item/updated","eventId":"test-healthcheck"}')
+          echo "pluggy-webhook -> HTTP $wcode (esperado: 200)"; cat /tmp/w.json; echo
+          [ "$wcode" = "200" ]

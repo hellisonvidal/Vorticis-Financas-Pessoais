@@ -161,7 +161,16 @@ O servidor já foi criado no seu Supabase: projeto **financas-pessoais**, em Sã
 5. **Publicar o servidor:** na aba **Actions**, abra **"Configurar servidor (Supabase)"** e clique em **Run workflow**. Essa ação:
    - cria as tabelas e as regras de segurança;
    - guarda as chaves da Pluggy no Supabase;
-   - publica a função `pluggy` e testa se ela está no ar.
+   - publica as funções `pluggy` e `pluggy-webhook` e testa se estão no ar.
+
+### Configurar o Webhook na Pluggy (Solicitar Acesso à Produção)
+Para liberar conexões reais no painel da Pluggy (`dashboard.pluggy.ai`), o checklist **Solicitar Acesso à Produção** pede o cadastro de um webhook:
+1. No painel da Pluggy, clique em **Configurar >** no passo **Registre webhooks para eventos-chave** (ou em **Applications → editar aplicação → Webhooks**).
+2. Informe a **URL do endpoint** do seu servidor Supabase:
+   - Neste repositório já configurado: `https://gdzgaxlcqjieczeabncq.supabase.co/functions/v1/pluggy-webhook`
+   - Para um servidor próprio: `https://<SUPABASE_PROJECT_REF>.supabase.co/functions/v1/pluggy-webhook`
+3. Em **Eventos**, selecione **`all`** (ou os eventos obrigatórios: `item/created`, `item/updated`, `transactions/created`, `transactions/updated` e `transactions/deleted`).
+4. Salve o webhook. *(Opcional: se quiser restringir quem chama essa URL, crie o secret `PLUGGY_WEBHOOK_SECRET` no GitHub/Supabase, rode **Configurar servidor** e adicione o header `x-webhook-secret` com o mesmo valor na Pluggy.)*
 6. **Gerar os aplicativos já configurados:** rode **"Gerar aplicativos"** (Run workflow) ou envie qualquer alteração. Com os secrets cadastrados, o `.exe` e o `.apk` já vêm com o endereço do seu servidor.
 7. **No app:** em **Configurações → Sincronização**, use **Criar conta** com o e-mail informado em `ALLOWED_EMAILS` e depois **Entrar e sincronizar**. Em seguida abra **Open Finance → Conectar banco**.
 
