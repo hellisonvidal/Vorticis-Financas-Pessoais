@@ -5,7 +5,7 @@ const Views = {};
 const App = (() => {
   const { $, $$, icon } = UI;
   const NAV = [
-    ['§', 'Visão geral'], ['painel', 'Painel'], ['receitas', 'Receitas'], ['despesas', 'Despesas'], ['lancamentos', 'Todos os lançamentos'], ['contas', 'Contas e cartões'],
+    ['§', 'Visão geral'], ['painel', 'Painel'], ['receitas', 'Receitas'], ['despesas', 'Despesas'], ['contas', 'Contas e cartões'],
     ['§', 'Planejamento'], ['orcamentos', 'Orçamentos'], ['metas', 'Metas'], ['dividas', 'Endividamento'],
     ['§', 'Ferramentas'], ['importar', 'Importar extrato'], ['bancos', 'Open Finance'], ['relatorios', 'Relatórios'], ['categorias', 'Categorias e regras'], ['config', 'Configurações'],
   ];
@@ -15,7 +15,8 @@ const App = (() => {
   function parseHash() {
     const h = (location.hash || '#/painel').replace(/^#\/?/, '');
     const [route, param] = h.split('/');
-    return { route: Views[route] ? route : 'painel', param: param ? decodeURIComponent(param) : null };
+    // rotas sem tela própria (ex.: #/lancamentos, que agora fica dentro do Painel) abrem o Painel
+    return { route: Views[route] && Views[route].render ? route : 'painel', param: param ? decodeURIComponent(param) : null };
   }
   const go = (route, param) => { const h = '#/' + route + (param ? '/' + encodeURIComponent(param) : ''); if (location.hash === h) render(); else location.hash = h; };
 

@@ -52,10 +52,10 @@ const Sync = (() => {
     await Store.setMeta('sb_session', s);
     return s;
   }
-  async function validSession() {
+  async function validSession(force = false) {
     let s = session();
     if (!s) throw new Error('Faça login na sincronização.');
-    if (Date.now() > s.expires_at - 60000) {
+    if (force || Date.now() > s.expires_at - 60000) {
       try {
         const j = await req('/auth/v1/token?grant_type=refresh_token', { method: 'POST', body: { refresh_token: s.refresh_token }, auth: false });
         s = await saveSession(j);
@@ -167,7 +167,20 @@ const Sync = (() => {
   globalThis.document && document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && timer) quiet(); });
 
   /** Chama uma função do Supabase (Edge Function) com o login do app */
-  const fn = (name, body) => req('/functions/v1/' + name, { method: 'POST', body: body || {} });
+  async function fn(name, body) {
+    const call = () => req('/functions/v1/' + name, { method: 'POST', body: body || {} });
+    try { return await call(); }
+    catch (e) {
+      if (e.status !== 401) throw e;
+      // sessão recusada pelo servidor: renova o login uma vez; se não der, pede para entrar de novo
+      try { await validSession(true); } catch (e2) { const x = new Error('Sua sessão expirou. Entre de novo com seu e-mail e senha.'); x.status = 401; x.needLogin = true; throw x; }
+      try { return await call(); }
+      catch (e3) {
+        if (e3.status === 401) { await Store.setMeta('sb_session', null); const x = new Error('Sua sessão não é mais válida no servidor. Entre de novo com seu e-mail e senha.'); x.status = 401; x.needLogin = true; x.raw = e3.raw; throw x; }
+        throw e3;
+      }
+    }
+  }
 
   return {
     cfg, configured, loggedIn, session, signUp, signIn, signOut, syncNow, start, stop, state, fn,
