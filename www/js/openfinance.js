@@ -1,5 +1,6 @@
 /* Open Finance via Pluggy (plano gratuito "Meu Pluggy"): lê contas, lançamentos e empréstimos dos SEUS bancos.
- * As credenciais ficam só neste aparelho (não vão para a nuvem de sincronização).
+ * Dois modos: "nuvem" (chaves guardadas no servidor Supabase) e "direto" (Client ID/Secret só neste aparelho;
+ * ficam no armazenamento local e NÃO vão para a nuvem de sincronização).
  * No Windows (Electron) e no Android (Capacitor) as chamadas saem pelo lado nativo, sem depender de CORS. */
 'use strict';
 
@@ -32,8 +33,9 @@ const OpenFinance = (() => {
   let apiKey = null, apiKeyExp = 0;
 
   async function setConfig(clientId, clientSecret) {
+    const k = await tryKeys(clientId, clientSecret); // lança erro se a Pluggy recusar: nada é gravado
     await Store.setMeta('pluggy_client_id', clientId.trim()); await Store.setMeta('pluggy_client_secret', clientSecret.trim());
-    apiKey = null;
+    apiKey = k; apiKeyExp = Date.now() + 100 * 60000;
   }
   async function clearAll() {
     for (const k of ['pluggy_client_id', 'pluggy_client_secret', 'pluggy_items', 'pluggy_links', 'pluggy_since']) await Store.setMeta(k, null);
@@ -70,9 +72,10 @@ const OpenFinance = (() => {
   function translate(status, msg) {
     if (status === 401 || status === 403) {
       if (/LIST_ITEMS/i.test(msg)) return 'Listar conexões automaticamente não está disponível no plano gratuito. Informe o ID da conexão (item).';
-      return 'Client ID ou Client Secret inválidos (ou sem permissão para este recurso).';
+      return 'A Pluggy recusou o acesso (' + status + '): Client ID ou Client Secret inválidos, ou esta conexão pertence a outra aplicação da Pluggy.' + (msg ? ' Detalhe: ' + String(msg).slice(0, 160) : '');
     }
-    if (status === 404) return 'Não encontrado na Pluggy. Confira o ID da conexão (item).';
+    if (status === 400 && /client|secret|credential/i.test(msg)) return 'Client ID ou Client Secret inválidos. Copie os dois da MESMA aplicação em dashboard.pluggy.ai.';
+    if (status === 404) return 'Não encontrado na Pluggy. Confira o ID da conexão (item). Conexões criadas na "Demo" do painel só funcionam com as chaves da mesma aplicação; prefira o botão "Conectar banco".';
     if (status === 429) return 'Muitas requisições à Pluggy. Aguarde alguns minutos e tente de novo.';
     if (status >= 500) return 'A Pluggy está com instabilidade no momento. Tente mais tarde.';
     return 'Erro da Pluggy (' + status + ')' + (msg ? ': ' + String(msg).slice(0, 200) : '');
@@ -93,7 +96,13 @@ const OpenFinance = (() => {
   }
   const safeId = (id) => { if (!/^[A-Za-z0-9-]{8,64}$/.test(String(id || ''))) throw new Error('ID inválido: ' + id); return id; };
 
-  const test = async () => { if (cloud()) return call('status'); apiKey = null; await key(); return true; };
+  const test = async () => { if (cloud()) return call('status'); apiKey = null; await key(); return { ok: true, configured: true, keysOk: true }; };
+  /** Testa um par de chaves SEM gravar (modo direto): só grava se a Pluggy aceitar */
+  async function tryKeys(clientId, clientSecret) {
+    const r = await http('POST', base() + '/auth', {}, { clientId: clientId.trim(), clientSecret: clientSecret.trim(), nonExpiring: false });
+    if (!r || !r.apiKey) throw new Error('A Pluggy não devolveu a chave de acesso.');
+    return r.apiKey;
+  }
   const fetchItem = (id) => (cloud() ? call('item', { id: safeId(id) }) : get('/items/' + safeId(id)));
   async function fetchAccounts(itemId) { const r = cloud() ? await call('accounts', { itemId: safeId(itemId) }) : await get('/accounts', { itemId: safeId(itemId) }); return (r && r.results) || []; }
   async function fetchLoans(itemId) { const r = cloud() ? await call('loans', { itemId: safeId(itemId) }) : await get('/loans', { itemId: safeId(itemId) }); return (r && r.results) || []; }
@@ -230,17 +239,31 @@ const OpenFinance = (() => {
   async function loadCloudItems() { const r = await call('items'); cloudItems = (r && r.results) || []; return cloudItems; }
   async function registerItem(id) { const it = await call('register', { itemId: safeId(id) }); await loadCloudItems(); return it; }
   /** Abre a tela de login do banco (Pluggy Connect) dentro do app. updateItem = reconectar uma conexão existente */
+  async function directConnectToken(updateItem) {
+    const body = { options: { avoidDuplicates: true } }; if (updateItem) body.itemId = safeId(updateItem);
+    const go = async () => http('POST', base() + '/connect_token', { 'X-API-KEY': await key() }, body);
+    try { return await go(); } catch (e) { if (e.status === 401) { apiKey = null; return go(); } throw e; }
+  }
   async function connect({ updateItem, onEvent } = {}) {
     if (typeof PluggyConnect === 'undefined') throw new Error('Componente da Pluggy não carregou.');
-    const { accessToken } = await call('connect-token', updateItem ? { itemId: updateItem } : {});
+    const { accessToken } = cloud() ? await call('connect-token', updateItem ? { itemId: updateItem } : {}) : await directConnectToken(updateItem);
     if (!accessToken) throw new Error('O servidor não devolveu o código de conexão.');
     const dark = document.documentElement.getAttribute('data-theme') === 'dark' || (!document.documentElement.getAttribute('data-theme') && matchMedia('(prefers-color-scheme: dark)').matches);
     return new Promise((resolve, reject) => {
       let done = false;
       const pc = new PluggyConnect({
-        connectToken: accessToken, language: 'pt', theme: dark ? 'dark' : 'light', countries: ['BR'], forceOauthInBrowser: U.isNative(), // no Windows a autorização abre numa janela do próprio app allowFullscreen: true,
+        // no Android a autorização do banco abre no navegador; no Windows, numa janela do próprio app
+        connectToken: accessToken, language: 'pt', theme: dark ? 'dark' : 'light', countries: ['BR'], forceOauthInBrowser: U.isNative(), allowFullscreen: true,
         ...(updateItem ? { updateItem } : {}),
-        onSuccess: async ({ item }) => { done = true; try { const r = await registerItem(item.id); resolve({ item: { ...item, ...r } }); } catch (e) { reject(e); } },
+        onSuccess: async ({ item }) => {
+          done = true;
+          try {
+            if (cloud()) { const r = await registerItem(item.id); return resolve({ item: { ...item, ...r } }); }
+            if (!items().some((i) => i.id === item.id)) await Store.setMeta('pluggy_items', [...items(), { id: item.id, name: (item.connector && item.connector.name) || 'Banco', status: item.status, lastUpdatedAt: item.lastUpdatedAt || null }]);
+            else await saveItemInfo(item);
+            resolve({ item });
+          } catch (e) { reject(e); }
+        },
         onError: (e) => { if (!done) { done = true; reject(new Error((e && e.message) || 'Não foi possível conectar o banco.')); } },
         onClose: () => { if (!done) { done = true; resolve(null); } },
         onEvent: (ev) => { try { onEvent && onEvent(ev); } catch (e) { /* ignora */ } },
@@ -289,6 +312,6 @@ const OpenFinance = (() => {
     return recs.length;
   }
 
-  return { syncAll, syncEverything, resumo, bankBalance, setServerKeys, mode, cloud, directConfigured, loadCloudItems, connect, configured, cfg, setConfig, clearAll, items, links, link, addItem, removeItem, saveItemInfo, test, fetchItem, fetchAccounts, fetchTransactions, fetchLoans,
+  return { syncAll, syncEverything, resumo, bankBalance, setServerKeys, tryKeys, mode, cloud, directConfigured, loadCloudItems, connect, configured, cfg, setConfig, clearAll, items, links, link, addItem, removeItem, saveItemInfo, test, fetchItem, fetchAccounts, fetchTransactions, fetchLoans,
     refreshItem, rowsFrom, toRow, txDate, accType, accLabel, createLocalAccount, loanToDebt, saveLoans, cents, base };
 })();

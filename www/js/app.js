@@ -5,7 +5,7 @@ const Views = {};
 const App = (() => {
   const { $, $$, icon } = UI;
   const NAV = [
-    ['§', 'Visão geral'], ['painel', 'Painel'], ['lancamentos', 'Lançamentos'], ['contas', 'Contas e cartões'],
+    ['§', 'Visão geral'], ['painel', 'Painel'], ['receitas', 'Receitas'], ['despesas', 'Despesas'], ['lancamentos', 'Todos os lançamentos'], ['contas', 'Contas e cartões'],
     ['§', 'Planejamento'], ['orcamentos', 'Orçamentos'], ['metas', 'Metas'], ['dividas', 'Endividamento'],
     ['§', 'Ferramentas'], ['importar', 'Importar extrato'], ['bancos', 'Open Finance'], ['relatorios', 'Relatórios'], ['categorias', 'Categorias e regras'], ['config', 'Configurações'],
   ];
@@ -48,11 +48,13 @@ const App = (() => {
 
   function buildNav() {
     $('#nav').innerHTML = NAV.map(([r, n]) => (r === '§' ? `<div class="navsec">${n}</div>` : `<a href="#/${r}" data-r="${r}">${icon(r)}<span>${n}</span></a>`)).join('');
-    $('#bottom').innerHTML = [['painel', 'Painel'], ['lancamentos', 'Lançamentos']].map(([r, n]) => `<a href="#/${r}" data-r="${r}">${icon(r)}<span>${n}</span></a>`).join('')
+    $('#bottom').innerHTML = [['painel', 'Painel'], ['receitas', 'Receitas']].map(([r, n]) => `<a href="#/${r}" data-r="${r}">${icon(r)}<span>${n}</span></a>`).join('')
       + `<a href="#" class="fab" id="fab" aria-label="Novo lançamento"><span class="f">${icon('plus')}</span></a>`
-      + [['contas', 'Contas'], ['relatorios', 'Relatórios']].map(([r, n]) => `<a href="#/${r}" data-r="${r}">${icon(r)}<span>${n}</span></a>`).join('');
-    $('#fab').onclick = (e) => { e.preventDefault(); Views.lancamentos.form(); };
-    $('#quickadd').onclick = () => Views.lancamentos.form();
+      + [['despesas', 'Despesas'], ['contas', 'Contas']].map(([r, n]) => `<a href="#/${r}" data-r="${r}">${icon(r)}<span>${n}</span></a>`).join('');
+    // "+" já abre como receita ou despesa conforme a tela em que você está
+    const quick = () => Views.lancamentos.form(null, state.route === 'receitas' ? { type: 'receita' } : state.route === 'despesas' ? { type: 'despesa' } : {});
+    $('#fab').onclick = (e) => { e.preventDefault(); quick(); };
+    $('#quickadd').onclick = quick;
     $('#menubtn').onclick = () => document.body.classList.toggle('menu');
     $('#scrim').onclick = () => document.body.classList.remove('menu');
     ['#syncbadge', '#syncbadge2'].forEach((s) => ($(s).onclick = () => go('config')));
@@ -118,7 +120,9 @@ const App = (() => {
     // Open Finance: traz lançamentos novos dos bancos conectados ao abrir o app (no máximo a cada 6 horas)
     setTimeout(async () => {
       try {
-        if (!OpenFinance.cloud() || !Sync.loggedIn() || Store.getMeta('pluggy_autosync', true) === false) return;
+        const pronto = OpenFinance.cloud() ? Sync.loggedIn() : OpenFinance.directConfigured() && (U.isNative() || globalThis.desktop);
+        if (!pronto || Store.getMeta('pluggy_autosync', true) === false) return;
+        if (!OpenFinance.cloud() && !OpenFinance.items().length) return;
         if (Date.now() - Store.getMeta('pluggy_last_sync', 0) < 6 * 3600 * 1000) return;
         const r = await OpenFinance.syncEverything();
         if (r.novos) UI.toast('Open Finance: ' + OpenFinance.resumo(r), 'ok', 7000);
