@@ -56,8 +56,9 @@ const TxScreens = (() => {
     });
   }
 
-  /** Monta uma tela de lista. kind = 'receita' | 'despesa' | null (todos) */
-  function screen(kind) {
+  /** Monta uma tela de lista. kind = 'receita' | 'despesa' | null (todos).
+   *  embedded = lista dentro do Painel (usa o mês do Painel e não repete os indicadores) */
+  function screen(kind, { embedded = false } = {}) {
   const K = kind ? KIND[kind] : null;
   const f = { mode: 'month', month: null, from: '', to: '', account: '', category: '', type: kind || '', status: '', q: '' };
   const sel = new Set();
@@ -121,7 +122,7 @@ const TxScreens = (() => {
   }
 
   function render() {
-    if (!f.month) f.month = App.state.month;
+    if (!f.month || embedded) f.month = App.state.month;
     const list = filtered();
     const shown = list.slice(0, limit);
     const types = Object.entries(F.TX_TYPES).map(([k, v]) => UI.opt(k, v, f.type)).join('');
@@ -141,8 +142,8 @@ const TxScreens = (() => {
     }
     return `
     <div class="filters">
-      <div class="seg" data-mode>${[['month', 'Mês'], ['range', 'Período'], ['all', 'Tudo']].map(([k, v]) => `<button data-v="${k}" class="${f.mode === k ? 'on' : ''}">${v}</button>`).join('')}</div>
-      ${f.mode === 'month' ? monthNav(f.month) : ''}
+      <div class="seg" data-mode>${[['month', embedded ? 'Mês do painel' : 'Mês'], ['range', 'Período'], ['all', 'Tudo']].map(([k, v]) => `<button data-v="${k}" class="${f.mode === k ? 'on' : ''}">${v}</button>`).join('')}</div>
+      ${f.mode === 'month' && !embedded ? monthNav(f.month) : ''}
       ${f.mode === 'range' ? `<input type="date" class="input" data-f="from" value="${esc(f.from)}" aria-label="De"><input type="date" class="input" data-f="to" value="${esc(f.to)}" aria-label="Até">` : ''}
       ${kind ? `<span class="spacer"></span><button class="btn ${kind === 'receita' ? 'btn-pos' : 'btn-neg'}" data-new>${icon('plus')}${K.novo}</button>` : ''}
     </div>
@@ -153,7 +154,7 @@ const TxScreens = (() => {
       ${kind ? '' : `<select class="input" data-f="type">${UI.opt('', 'Todos os tipos', f.type)}${types}</select>`}
       <select class="input" data-f="status">${statusOpts}</select>
     </div>
-    ${kpis}
+    ${embedded ? `<p class="small muted" style="margin:-4px 0 10px">${list.length} lançamento(s) • receitas <b class="money pos">${U.money(sum(list.filter((t) => t.type === 'receita')))}</b> • despesas <b class="money neg">${U.money(sum(list.filter((t) => t.type === 'despesa')))}</b></p>` : kpis}
     ${kind ? byCategory(list) : ''}
     ${sel.size ? `<div class="selbar row"><b>${sel.size} selecionado(s)</b><span class="spacer"></span>
       <button class="btn sm" data-bulk="done">${icon('check')}${kind === 'receita' ? 'Recebido' : kind === 'despesa' ? 'Pago' : 'Efetivar'}</button><button class="btn sm" data-bulk="pend">Pendente</button>
@@ -240,7 +241,7 @@ const TxScreens = (() => {
     Promise.resolve(p).then((r) => UI.toast(typeof r === 'string' ? 'Salvo em ' + r : 'Arquivo gerado', 'ok')).catch((e) => UI.toast(e.message, 'error'));
   }
 
-  return { title: kind ? K.title : 'Todos os lançamentos', render, bind, setFilter, form, row, groupedList, bindList, signed };
+  return { title: kind ? K.title : 'Lançamentos', render, bind, setFilter, form, row, groupedList, bindList, signed };
   }
   // ---------------- formulário ----------------
   function form(tx = null, preset = {}, ctxAccount = null) {
@@ -351,6 +352,10 @@ const TxScreens = (() => {
   return { screen, form, row, groupedList, bindList, signed, removeTx, NEW_TITLE };
 })();
 
-Views.lancamentos = TxScreens.screen(null);
+// "Todos os lançamentos" agora fica dentro do Painel; Views.lancamentos mantém o formulário e as listas
+// usados por outras telas (não é mais uma rota: #/lancamentos abre o Painel).
+const PainelTx = TxScreens.screen(null, { embedded: true });
+Views.lancamentos = { route: false, form: TxScreens.form, row: TxScreens.row, groupedList: TxScreens.groupedList, bindList: TxScreens.bindList, signed: TxScreens.signed,
+  setFilter: (o) => PainelTx.setFilter(o), list: PainelTx };
 Views.receitas = TxScreens.screen('receita');
 Views.despesas = TxScreens.screen('despesa');

@@ -15,7 +15,7 @@ Com a sincronização ativada (Supabase, gratuito), o que você lança no comput
 ## 1. Funcionalidades
 
 - **Contas e saldos**: conta corrente, poupança, carteira, investimentos e cartões de crédito. Cada conta mostra o **saldo atual** (só o que já foi pago ou recebido) e o **saldo previsto** (inclui os pendentes). Há **ajuste de saldo** para igualar ao banco e opção de arquivar contas.
-- **Receitas e Despesas em telas separadas**: cada uma mostra só o seu tipo, com total do mês (e comparação com o mês anterior), quanto já foi recebido/pago, quanto falta receber/pagar, o que está atrasado e um quadro **por categoria** (toque numa categoria para filtrar a lista). O botão **+** já abre como receita ou despesa conforme a tela em que você está. A tela **Todos os lançamentos** continua com tudo junto, incluindo transferências.
+- **Receitas e Despesas em telas separadas**: cada uma mostra só o seu tipo, com total do mês (e comparação com o mês anterior), quanto já foi recebido/pago, quanto falta receber/pagar, o que está atrasado e um quadro **por categoria** (toque numa categoria para filtrar a lista). O botão **+** já abre como receita ou despesa conforme a tela em que você está. A lista com **todos os lançamentos** (incluindo transferências) fica no fim do **Painel**.
 - **Lançamentos**: receitas, despesas e transferências. Têm status pago/pendente, observações e etiquetas. Podem ser **parcelados** (o valor é dividido e a diferença de centavos fica na 1ª parcela) ou **recorrentes** (mensal, semanal, quinzenal, anual). A lista tem filtros, busca (inclusive por valor) e ações em lote.
 - **Cartão de crédito**: limite usado e disponível, **faturas** por ciclo (pelo dia de fechamento e de vencimento), situação (aberta, fechada, paga) e botão "Pagar fatura".
 - **Importação de extratos**:
@@ -38,7 +38,7 @@ Com a sincronização ativada (Supabase, gratuito), o que você lança no comput
   - **Registrato (Banco Central)**: importa o PDF "Empréstimos e Financiamentos (SCR)". Esse relatório lista tudo o que os bancos informam no seu CPF. Reimportar todo mês **atualiza** os valores, sem duplicar.
   - **Atalhos para as consultas gratuitas oficiais**: Serasa, SPC Brasil, Boa Vista (SCPC) e protestos em cartório (CENPROT).
   - **Relatório** de endividamento em PDF ou Excel.
-- **Painel** com gráficos, contas a pagar e receber e evolução do patrimônio.
+- **Painel** completo: saldo e resultado do mês, médias de 12 meses, gasto médio por dia com projeção do mês, fluxo de caixa diário, receitas × despesas e sobra de cada mês (12 meses), despesas e receitas por categoria, maiores despesas, o que mudou em relação ao mês anterior, evolução do patrimônio, contas, contas a pagar e receber, orçamentos e, no fim, a lista de todos os lançamentos com filtros.
 > **Por que a consulta ao Serasa, SPC e Banco Central não é automática?** Esses órgãos não oferecem consulta por sistema (API) para pessoa física.
 > - **Serasa, SPC e Boa Vista:** só vendem a integração para empresas, com contrato, CNPJ e cobrança por consulta.
 > - **Registrato (Banco Central):** funciona apenas no site do Banco Central, com login gov.br.
@@ -185,6 +185,8 @@ Para liberar conexões reais no painel da Pluggy (`dashboard.pluggy.ai`), o chec
 **Plano gratuito da Pluggy:** não foi possível confirmar se a tela de conexão dentro de outro app está incluída no plano gratuito. Se a Pluggy recusar, há duas saídas:
 - conecte o banco no **Meu Pluggy** (<https://meu.pluggy.ai>) e use **"Já conectei um banco no Meu Pluggy: vincular pelo ID"** na tela Open Finance;
 - use o **modo avançado**, com as chaves guardadas no aparelho.
+
+**"Sua sessão não é mais válida" / "Faça login no app":** o login do app venceu ou foi encerrado no servidor. A tela Open Finance agora tenta renovar sozinha e, se não conseguir, mostra os campos de e-mail e senha ali mesmo.
 
 **Chaves da Pluggy erradas ou trocadas:** a tela Open Finance confere as chaves com a Pluggy toda vez que abre. Se forem recusadas, ela mostra o motivo e um formulário para cadastrar o par correto. As chaves cadastradas pelo app **têm prioridade** sobre os secrets `PLUGGY_CLIENT_ID`/`PLUGGY_CLIENT_SECRET`, então dá para corrigir sem mexer no Supabase. Também dá para trocar a qualquer momento em **Open Finance → Trocar as chaves da Pluggy do servidor**.
 

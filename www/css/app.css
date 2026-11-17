@@ -102,6 +102,8 @@ h3 { font-size: 15.5px; font-weight: 650; margin-bottom: 12px; }
 .btn.primary { background: linear-gradient(135deg, var(--btn), var(--btn-2)); border-color: transparent; color: #fff; box-shadow: 0 6px 16px -6px color-mix(in srgb, var(--btn) 70%, transparent); }
 .btn.primary:hover { filter: brightness(1.07); box-shadow: 0 8px 20px -6px color-mix(in srgb, var(--btn) 80%, transparent); }
 .btn.danger { color: var(--neg); } .btn.danger:hover { border-color: var(--neg); background: color-mix(in srgb, var(--neg) 7%, var(--card)); }
+.dsec { display: flex; align-items: center; gap: 8px; font-size: 18px; margin: 26px 0 14px; letter-spacing: -0.01em; }
+.dsec svg.i { width: 20px; height: 20px; color: var(--accent); }
 .btn.btn-pos, .btn.btn-neg { color: #fff; border-color: transparent; }
 .btn.btn-pos { background: #059669; } .btn.btn-neg { background: #e11d48; }
 .btn.btn-pos:hover, .btn.btn-neg:hover { filter: brightness(1.08); }

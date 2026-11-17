@@ -17,7 +17,7 @@ Views.bancos = (() => {
       // servidores antigos não devolvem keysOk: nesse caso considera válido
       Object.assign(srv, { ok: true, configured: !!r.configured, keysOk: r.keysOk !== false, keysError: r.keysError || '', keysSource: r.keysSource || null, hint: r.clientIdHint || '', canLink: !!r.canLinkExisting, err: '' });
       if (r.configured && srv.keysOk) await OpenFinance.loadCloudItems();
-    } catch (e) { Object.assign(srv, { ok: false, err: e.message }); }
+    } catch (e) { Object.assign(srv, { ok: false, err: e.message, needLogin: !!e.needLogin || e.status === 401 }); }
     srv.checked = true; srv.loading = false; App.render();
   }
 
@@ -70,7 +70,20 @@ Views.bancos = (() => {
 
     if (cloud) {
       let top;
-      if (!Sync.configured() || !Sync.loggedIn()) {
+      if (Sync.configured() && (!Sync.loggedIn() || (srv.checked && !srv.ok && srv.needLogin))) {
+        const email = Store.getMeta('sb_last_email') || ((Sync.session() || {}).user || {}).email || '';
+        top = `<div class="card" style="max-width:560px">
+          <h3>${icon('shield')} Entre para usar o Open Finance</h3>
+          ${srv.needLogin && srv.err ? `<p class="small neg">${U.esc(srv.err)}</p>` : ''}
+          <p class="small muted">É o mesmo login da sincronização (Supabase). As chaves da Pluggy ficam no servidor, nunca no aparelho.</p>
+          <div class="form" style="margin-top:10px">
+            <label class="field full"><span>E-mail</span><input class="input" id="lgemail" type="email" autocomplete="username" value="${U.esc(email)}"></label>
+            <label class="field full"><span>Senha</span><input class="input" id="lgpass" type="password" autocomplete="current-password"></label>
+          </div>
+          <p class="small neg" id="lgerr"></p>
+          <div class="row" style="margin-top:6px"><button class="btn primary" id="lgbtn">${icon('check')}Entrar</button><a class="btn ghost" href="#/config">Criar conta / outras opções</a></div>
+        </div>`;
+      } else if (!Sync.configured()) {
         top = `<div class="card" style="text-align:center;padding:28px">${icon('bancos')}<h3 style="margin:10px 0 6px">Entre no app para usar o Open Finance</h3>
           <p class="muted small" style="max-width:520px;margin:0 auto 14px">O Open Finance usa o mesmo login da sincronização. As chaves da Pluggy ficam guardadas no seu servidor (Supabase), nunca no aparelho.</p>
           <a class="btn primary" href="#/config">Ir para Configurações → Sincronização</a></div>`;
@@ -228,6 +241,17 @@ Views.bancos = (() => {
   function bind(root) {
     const pm = $('#pmode', root); if (pm) pm.onchange = async () => { await Store.setMeta('pluggy_mode', pm.checked ? 'direto' : 'nuvem'); Object.keys(cache).forEach((k) => delete cache[k]); srv.checked = false; directErr = ''; App.render(); };
     const rc = $('#precheck', root); if (rc) rc.onclick = () => { srv.checked = false; App.render(); };
+    const lb = $('#lgbtn', root);
+    if (lb) {
+      const go = async () => {
+        const em = $('#lgemail', root).value.trim(), pw = $('#lgpass', root).value;
+        if (!em || !pw) { $('#lgerr', root).textContent = 'Informe e-mail e senha.'; return; }
+        lb.disabled = true; $('#lgerr', root).textContent = '';
+        try { await Sync.signIn(em, pw); await Store.setMeta('sb_last_email', em); UI.toast('Login feito ✔', 'ok'); Object.assign(srv, { checked: false, needLogin: false, err: '' }); App.render(); }
+        catch (e) { $('#lgerr', root).textContent = e.message; lb.disabled = false; }
+      };
+      lb.onclick = go; $('#lgpass', root).onkeydown = (e) => { if (e.key === 'Enter') go(); };
+    }
     const sk = $('#sksave', root);
     if (sk) sk.onclick = async () => {
       const id = $('#skid', root).value.trim(), sec = $('#sksec', root).value.trim();

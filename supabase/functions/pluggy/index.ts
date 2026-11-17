@@ -70,9 +70,9 @@ Deno.serve(async (req) => {
     if (req.method !== 'POST') throw new HttpErr(405, 'Use POST.');
     const auth = req.headers.get('Authorization') || '';
     const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, { global: { headers: { Authorization: auth } }, auth: { persistSession: false } });
-    const { data: u } = await db.auth.getUser(auth.replace(/^Bearer\s+/i, ''));
+    const { data: u, error: ue } = await db.auth.getUser(auth.replace(/^Bearer\s+/i, ''));
     const user = u && u.user;
-    if (!user) throw new HttpErr(401, 'Faça login no app (Configurações → Sincronização).');
+    if (!user) throw new HttpErr(401, 'Sua sessão não é mais válida no servidor' + (ue && ue.message ? ' (' + ue.message + ')' : '') + '. Entre de novo com seu e-mail e senha.');
     const allowed = (Deno.env.get('ALLOWED_EMAILS') || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
     let isOwner = allowed.includes(String(user.email || '').toLowerCase());
     if (!isOwner) {
