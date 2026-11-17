@@ -7,9 +7,13 @@ if [ -z "${SUPABASE_PROJECT_REF:-}" ] || [ -z "${SUPABASE_ACCESS_TOKEN:-}" ]; th
   echo "Secrets do Supabase não configurados: o app será gerado sem servidor pré-configurado."; exit 0
 fi
 if ! [[ "$SUPABASE_PROJECT_REF" =~ ^[a-z0-9]{10,40}$ ]]; then echo "SUPABASE_PROJECT_REF inválido"; exit 1; fi
-KEYS=$(curl -fsS "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/api-keys" -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN")
+# Se o token do Supabase estiver vencido/revogado, NÃO trava a compilação: usa o www/config.js do repositório.
+if ! KEYS=$(curl -fsS "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/api-keys" -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"); then
+  echo "::warning::O secret SUPABASE_ACCESS_TOKEN foi recusado pelo Supabase (vencido ou revogado). O app usa o www/config.js do repositório. Gere um token novo em supabase.com/dashboard/account/tokens e atualize o secret no GitHub."
+  exit 0
+fi
 ANON=$(printf '%s' "$KEYS" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const k=JSON.parse(s);const a=k.find(x=>x.name==="anon")||k.find(x=>x.type==="publishable");if(!a||!a.api_key){process.exit(2)}process.stdout.write(a.api_key)})')
-if [ -z "$ANON" ]; then echo "Não foi possível obter a chave anon do projeto"; exit 1; fi
+if [ -z "$ANON" ]; then echo "::warning::Não foi possível obter a chave anon do projeto; usando o www/config.js do repositório."; exit 0; fi
 cat > www/config.js <<CFG
 /* Gerado automaticamente na compilação (GitHub Actions). */
 window.APP_CONFIG = {

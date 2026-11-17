@@ -36,6 +36,17 @@ jobs:
           for v in PLUGGY_CLIENT_ID PLUGGY_CLIENT_SECRET ALLOWED_EMAILS; do [ -z "${!v}" ] && echo "::warning::Secret $v não informado: o Open Finance pelo servidor não vai funcionar até ser configurado."; done
           echo "ok=true" >> $GITHUB_OUTPUT
 
+      - name: Conferir o token do Supabase
+        if: steps.chk.outputs.ok == 'true'
+        run: |
+          code=$(curl -sS -o /tmp/t.json -w '%{http_code}' "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF" -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN")
+          if [ "$code" = "401" ] || [ "$code" = "403" ]; then
+            echo "::error::O secret SUPABASE_ACCESS_TOKEN foi recusado pelo Supabase (HTTP $code: vencido, revogado ou copiado errado). Gere um novo em https://supabase.com/dashboard/account/tokens e atualize em GitHub > Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          if [ "$code" = "404" ]; then echo "::error::Projeto não encontrado: confira o secret SUPABASE_PROJECT_REF."; exit 1; fi
+          echo "Token do Supabase OK (HTTP $code)"
+
       - uses: actions/setup-node@v4
         if: steps.chk.outputs.ok == 'true'
         with:
