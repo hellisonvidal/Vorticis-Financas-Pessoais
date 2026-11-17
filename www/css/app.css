@@ -102,6 +102,18 @@ h3 { font-size: 15.5px; font-weight: 650; margin-bottom: 12px; }
 .btn.primary { background: linear-gradient(135deg, var(--btn), var(--btn-2)); border-color: transparent; color: #fff; box-shadow: 0 6px 16px -6px color-mix(in srgb, var(--btn) 70%, transparent); }
 .btn.primary:hover { filter: brightness(1.07); box-shadow: 0 8px 20px -6px color-mix(in srgb, var(--btn) 80%, transparent); }
 .btn.danger { color: var(--neg); } .btn.danger:hover { border-color: var(--neg); background: color-mix(in srgb, var(--neg) 7%, var(--card)); }
+.btn.btn-pos, .btn.btn-neg { color: #fff; border-color: transparent; }
+.btn.btn-pos { background: #059669; } .btn.btn-neg { background: #e11d48; }
+.btn.btn-pos:hover, .btn.btn-neg:hover { filter: brightness(1.08); }
+/* Receitas/Despesas por categoria */
+.catsum { margin-bottom: 18px; }
+.catrows { display: grid; gap: 4px; margin-top: 10px; }
+.catrow { display: grid; grid-template-columns: 10px minmax(90px, 1.2fr) 2fr 42px minmax(90px, auto); align-items: center; gap: 10px; width: 100%; padding: 7px 8px; border: 1px solid transparent; border-radius: 10px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.catrow:hover { background: var(--hover); } .catrow.on { border-color: var(--accent); background: var(--accent-soft); }
+.catrow .dot { width: 10px; height: 10px; border-radius: 50%; }
+.catrow .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
+.catrow .bar { height: 8px; } .catrow .pc { color: var(--muted); font-size: 12.5px; text-align: right; } .catrow b { text-align: right; font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) { .catrow { grid-template-columns: 10px 1fr 38px auto; } .catrow .bar { display: none; } }
 .btn.ghost { background: transparent; border-color: transparent; box-shadow: none; }
 .btn.ghost:hover { background: var(--hover); }
 .btn.sm { padding: 5px 11px; min-height: 32px; font-size: 13px; border-radius: 10px; }

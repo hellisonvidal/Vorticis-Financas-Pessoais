@@ -18,21 +18,30 @@ class HttpErr extends Error { constructor(public status: number, msg: string) { 
 
 // cliente com privilégio de servidor: só para ler/gravar a configuração (fin_server_config)
 const admin = () => createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } });
-let creds: { clientId: string; clientSecret: string } | null = null, credsAt = 0;
+let creds: { clientId: string; clientSecret: string; source: string } | null = null, credsAt = 0;
+// Ordem: chaves cadastradas pelo app (tabela) têm prioridade sobre os secrets do Supabase.
+// Assim, se os secrets estiverem errados ou vencidos, dá para corrigir pelo próprio app.
 async function getCreds() {
-  const envId = Deno.env.get('PLUGGY_CLIENT_ID'), envSecret = Deno.env.get('PLUGGY_CLIENT_SECRET');
-  if (envId && envSecret) return { clientId: envId, clientSecret: envSecret };
   if (creds && Date.now() - credsAt < 60_000) return creds;
-  const { data } = await admin().from('fin_server_config').select('key,value').in('key', ['pluggy_client_id', 'pluggy_client_secret']);
-  const m = Object.fromEntries((data || []).map((r: { key: string; value: string }) => [r.key, r.value]));
-  creds = m.pluggy_client_id && m.pluggy_client_secret ? { clientId: m.pluggy_client_id, clientSecret: m.pluggy_client_secret } : null;
+  let fromDb: typeof creds = null;
+  try {
+    const { data } = await admin().from('fin_server_config').select('key,value').in('key', ['pluggy_client_id', 'pluggy_client_secret']);
+    const m = Object.fromEntries((data || []).map((r: { key: string; value: string }) => [r.key, r.value]));
+    if (m.pluggy_client_id && m.pluggy_client_secret) fromDb = { clientId: m.pluggy_client_id.trim(), clientSecret: m.pluggy_client_secret.trim(), source: 'app' };
+  } catch { /* tabela ausente: usa os secrets */ }
+  const envId = (Deno.env.get('PLUGGY_CLIENT_ID') || '').trim(), envSecret = (Deno.env.get('PLUGGY_CLIENT_SECRET') || '').trim();
+  creds = fromDb || (envId && envSecret ? { clientId: envId, clientSecret: envSecret, source: 'secrets' } : null);
   credsAt = Date.now();
   return creds;
 }
 async function pluggyAuth(clientId: string, clientSecret: string) {
-  const r = await fetch(PLUGGY + '/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, clientSecret, nonExpiring: false }) });
-  const j = await r.json().catch(() => ({}));
-  return { ok: r.ok && !!j.apiKey, status: r.status, apiKey: j.apiKey as string };
+  try {
+    const r = await fetch(PLUGGY + '/auth', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ clientId, clientSecret, nonExpiring: false }) });
+    const j = await r.json().catch(() => ({}));
+    return { ok: r.ok && !!j.apiKey, status: r.status, apiKey: j.apiKey as string, message: String(j.message || j.error || '') };
+  } catch (e) {
+    return { ok: false, status: 0, apiKey: '', message: 'Sem conexão com a Pluggy: ' + (e as Error).message };
+  }
 }
 let apiKey = '', apiKeyExp = 0, apiKeyFor = '';
 async function key(): Promise<string> {
@@ -40,7 +49,7 @@ async function key(): Promise<string> {
   if (!c) throw new HttpErr(503, 'As chaves da Pluggy ainda não foram cadastradas. Abra Open Finance no app e informe o Client ID e o Client Secret.');
   if (apiKey && apiKeyFor === c.clientId + ':' + c.clientSecret && Date.now() < apiKeyExp) return apiKey;
   const r = await pluggyAuth(c.clientId, c.clientSecret);
-  if (!r.ok) throw new HttpErr(502, 'A Pluggy recusou as chaves cadastradas (' + r.status + '). Cadastre-as de novo em Open Finance.');
+  if (!r.ok) throw new HttpErr(502, (r.status === 401 || r.status === 403 || r.status === 400 ? 'A Pluggy recusou as chaves cadastradas' : 'Não foi possível autenticar na Pluggy') + ' (' + (r.status || 'rede') + '). Abra Open Finance no app e cadastre o Client ID e o Client Secret de novo.');
   apiKey = r.apiKey; apiKeyExp = Date.now() + 100 * 60_000; apiKeyFor = c.clientId + ':' + c.clientSecret;
   return apiKey;
 }
@@ -87,17 +96,23 @@ Deno.serve(async (req) => {
       if (!data || !data.length) throw new HttpErr(403, 'Esta conexão não está vinculada ao seu login.');
     };
 
-    if (a === 'status') return json(200, { ok: true, configured: !!(await getCreds()), owner: true, canLinkExisting: true, email: user.email, keysFromEnv: !!Deno.env.get('PLUGGY_CLIENT_ID') });
+    if (a === 'status') {
+      // além de dizer se há chaves, confere se a Pluggy ainda aceita (chave errada/revogada aparecia como "configurado")
+      const c = await getCreds();
+      let keysOk = false, keysError = '';
+      if (c) { try { await key(); keysOk = true; } catch (e) { keysError = (e as Error).message; } }
+      return json(200, { ok: true, configured: !!c, keysOk, keysError, keysSource: c ? c.source : null, clientIdHint: c ? c.clientId.slice(0, 8) + '…' : null, owner: true, canLinkExisting: true, email: user.email });
+    }
 
     if (a === 'set-keys') {
       const clientId = String(b.clientId || '').trim(), clientSecret = String(b.clientSecret || '').trim();
       if (!/^[A-Za-z0-9_-]{3,100}$/.test(clientId) || clientSecret.length < 3 || clientSecret.length > 300) throw new HttpErr(400, 'Client ID ou Client Secret em formato inválido.');
       const r = await pluggyAuth(clientId, clientSecret);
-      if (!r.ok) throw new HttpErr(400, 'A Pluggy não aceitou essas chaves (' + r.status + '). Confira o Client ID e o Client Secret.');
+      if (!r.ok) throw new HttpErr(400, r.status === 0 ? r.message : 'A Pluggy não aceitou essas chaves (' + r.status + (r.message ? ': ' + r.message.slice(0, 160) : '') + '). Confira o Client ID e o Client Secret da mesma aplicação em dashboard.pluggy.ai.');
       const now = new Date().toISOString();
       const { error } = await admin().from('fin_server_config').upsert([{ key: 'pluggy_client_id', value: clientId, updated_at: now }, { key: 'pluggy_client_secret', value: clientSecret, updated_at: now }]);
       if (error) throw new HttpErr(500, 'Não foi possível salvar as chaves: ' + error.message);
-      creds = { clientId, clientSecret }; credsAt = Date.now(); apiKey = r.apiKey; apiKeyExp = Date.now() + 100 * 60_000; apiKeyFor = clientId + ':' + clientSecret;
+      creds = { clientId, clientSecret, source: 'app' }; credsAt = Date.now(); apiKey = r.apiKey; apiKeyExp = Date.now() + 100 * 60_000; apiKeyFor = clientId + ':' + clientSecret;
       return json(200, { ok: true, configured: true });
     }
 

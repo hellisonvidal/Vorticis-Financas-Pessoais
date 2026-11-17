@@ -1,12 +1,70 @@
 'use strict';
-/* Lançamentos: lista com filtros, seleção em lote e formulário */
-Views.lancamentos = (() => {
+/* Lançamentos: lista com filtros, seleção em lote e formulário.
+ * A mesma tela é montada três vezes: "Receitas" e "Despesas" (cada uma só com o seu tipo, categorias
+ * e indicadores próprios) e "Todos os lançamentos" (inclui transferências). */
+const TxScreens = (() => {
   const { $, $$, icon, esc } = { ...UI, esc: U.esc };
-  const f = { mode: 'month', month: null, from: '', to: '', account: '', category: '', type: '', status: '', q: '' };
+  const KIND = {
+    receita: { title: 'Receitas', one: 'receita', novo: 'Nova receita', done: 'Recebido', pend: 'A receber', late: 'Atrasadas', cls: 'pos', ic: 'up' },
+    despesa: { title: 'Despesas', one: 'despesa', novo: 'Nova despesa', done: 'Pago', pend: 'A pagar', late: 'Atrasadas', cls: 'neg', ic: 'down' },
+  };
+  const NEW_TITLE = { receita: 'Nova receita', despesa: 'Nova despesa', transferencia: 'Nova transferência' };
+
+  function signed(t, accId) {
+    if (t.type === 'transferencia') return accId ? F.effect(t, accId) : 0;
+    return t.type === 'receita' ? t.amount : -t.amount;
+  }
+  function row(t, { accId = null, check = true, sel = null, kind = null } = {}) {
+    const isT = t.type === 'transferencia';
+    const v = signed(t, accId);
+    const cat = isT ? 'Transferência' : F.catName(t.category_id);
+    const color = isT ? '#2563eb' : F.catColor(t.category_id);
+    const where = isT ? `${F.accName(t.account_id)} → ${F.accName(t.to_account_id)}` : F.accName(t.account_id);
+    const pend = t.status === 'pendente';
+    // nas telas de Receitas/Despesas o valor aparece sem sinal (a tela já diz o que é)
+    const shown = kind && !accId ? U.money(t.amount) : isT && !accId ? U.money(t.amount) : U.money(v);
+    const mcls = kind ? KIND[kind].cls : isT && !accId ? '' : UI.moneyClass(v);
+    const pendLabel = t.date < U.today() ? 'atrasado' : t.type === 'receita' ? 'a receber' : t.type === 'despesa' ? 'a pagar' : 'pendente';
+    return `<li class="tx ${pend ? 'pend' : ''}" data-id="${t.id}">
+      ${check ? `<input type="checkbox" data-sel="${t.id}" ${sel && sel.has(t.id) ? 'checked' : ''} aria-label="Selecionar">` : ''}
+      <span class="ic" style="background:${esc(color)}">${isT ? icon('transfer') : UI.initials(cat)}</span>
+      <span class="info"><b>${esc(t.description)}</b><small>${esc(cat)} • ${esc(where)}${t.tags && t.tags.length ? ' • #' + t.tags.map(esc).join(' #') : ''}</small></span>
+      <span class="val"><span class="money ${mcls}">${shown}</span>
+      ${pend ? `<small><button class="badge warn" data-toggle="${t.id}" title="Marcar como ${t.type === 'receita' ? 'recebido' : 'pago'}">${pendLabel}</button></small>` : ''}</span>
+    </li>`;
+  }
+  function groupedList(list, opts = {}) {
+    if (!list.length) return `<p class="empty">${opts.emptyText || 'Nenhum lançamento encontrado.'}</p>`;
+    let h = '<ul class="txlist">'; let day = null; let dayTotal = 0; let buf = '';
+    const val = (t) => (opts.kind && !opts.accId ? t.amount : signed(t, opts.accId));
+    const flush = () => { if (day) h += `<li class="txday"><span>${U.fmtDate(day)} • ${['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'][U.parseISO(day).getDay()]}</span><span class="money">${opts.accId || !opts.noTotals ? U.money(dayTotal) : ''}</span></li>` + buf; buf = ''; dayTotal = 0; };
+    list.forEach((t) => { if (t.date !== day) { flush(); day = t.date; } buf += row(t, opts); dayTotal += val(t); });
+    flush();
+    return h + '</ul>';
+  }
+
+  function bindList(root, accId, sel) {
+    root.addEventListener('click', async (e) => {
+      const tg = e.target.closest('[data-toggle]');
+      if (tg) { e.stopPropagation(); const t = Store.get('transactions', tg.dataset.toggle); await Store.upsert('transactions', { ...t, status: 'efetivada' }); UI.toast(t.type === 'receita' ? 'Marcado como recebido' : t.type === 'despesa' ? 'Marcado como pago' : 'Marcado como efetivado', 'ok'); return; }
+      if (e.target.matches('[data-sel]')) { e.stopPropagation(); return; }
+      const li = e.target.closest('.tx[data-id]');
+      if (li) form(Store.get('transactions', li.dataset.id), {}, accId);
+    });
+    root.addEventListener('change', (e) => {
+      if (sel && e.target.matches('[data-sel]')) { e.target.checked ? sel.add(e.target.dataset.sel) : sel.delete(e.target.dataset.sel); App.render(); }
+    });
+  }
+
+  /** Monta uma tela de lista. kind = 'receita' | 'despesa' | null (todos) */
+  function screen(kind) {
+  const K = kind ? KIND[kind] : null;
+  const f = { mode: 'month', month: null, from: '', to: '', account: '', category: '', type: kind || '', status: '', q: '' };
   const sel = new Set();
   let limit = 300;
 
-  function setFilter(o) { Object.assign(f, { account: '', category: '', type: '', status: '', q: '' }, o); sel.clear(); limit = 300; }
+  function setFilter(o) { Object.assign(f, { account: '', category: '', type: kind || '', status: '', q: '' }, o); if (kind) f.type = kind; sel.clear(); limit = 300; }
+
 
   function range() {
     if (f.mode === 'all') return ['0000-01-01', '9999-12-31'];
@@ -18,10 +76,12 @@ Views.lancamentos = (() => {
     const qMoney = U.parseMoney(f.q);
     return F.txs().filter((t) => {
       if (t.date < from || t.date > to) return false;
+      if (kind && t.type !== kind) return false;
       if (f.account && t.account_id !== f.account && t.to_account_id !== f.account) return false;
       if (f.category && (f.category === '__none' ? t.category_id || t.type === 'transferencia' : t.category_id !== f.category)) return false;
       if (f.type && t.type !== f.type) return false;
-      if (f.status && (t.status || 'efetivada') !== f.status) return false;
+      if (f.status === 'atrasada') { if (t.status !== 'pendente' || t.date >= U.today()) return false; }
+      else if (f.status && (t.status || 'efetivada') !== f.status) return false;
       if (q) {
         const hay = U.norm([t.description, t.notes, (t.tags || []).join(' '), F.catName(t.category_id), F.accName(t.account_id)].join(' '));
         if (!hay.includes(q) && !(qMoney !== null && Math.abs(qMoney) === t.amount)) return false;
@@ -29,85 +89,83 @@ Views.lancamentos = (() => {
       return true;
     }).sort((a, b) => b.date.localeCompare(a.date) || (b.created_at || '').localeCompare(a.created_at || ''));
   }
+  const sum = (l) => l.reduce((a, t) => a + t.amount, 0);
 
-  function signed(t, accId) {
-    if (t.type === 'transferencia') return accId ? F.effect(t, accId) : 0;
-    return t.type === 'receita' ? t.amount : -t.amount;
+  /** Indicadores da tela de Receitas/Despesas */
+  function kindKpis(list) {
+    const total = sum(list), done = sum(list.filter((t) => t.status !== 'pendente'));
+    const pendL = list.filter((t) => t.status === 'pendente'), lateL = pendL.filter((t) => t.date < U.today());
+    let cmp = '';
+    if (f.mode === 'month' && !f.q && !f.category && !f.account && !f.status) {
+      const prev = U.addMonthYM(f.month, -1), [a, b] = [U.monthStart(prev), U.monthEnd(prev)];
+      const pt = sum(F.txs().filter((t) => t.type === kind && t.date >= a && t.date <= b));
+      if (pt) { const d = Math.round((total - pt) / pt * 100); cmp = d === 0 ? 'igual a ' + U.fmtMonth(prev).toLowerCase() : `${d > 0 ? '+' : ''}${d}% vs ${U.fmtMonth(prev).toLowerCase()}`; }
+    }
+    return `<div class="kpis">
+      <div class="kpi has-ic t-${K.cls}"><div class="kic">${icon(K.ic)}</div><span>Total de ${K.title.toLowerCase()}</span><b class="money ${K.cls}">${U.money(total)}</b><small>${list.length} ${list.length === 1 ? K.one : K.title.toLowerCase()}${cmp ? ' • ' + cmp : ''}</small></div>
+      <div class="kpi has-ic t-pos"><div class="kic">${icon('check')}</div><span>${K.done}</span><b class="money">${U.money(done)}</b><small>${total ? Math.round(done / total * 100) + '% do total' : '—'}</small></div>
+      <a class="kpi has-ic t-warn" href="#" data-quick="pendente" style="color:inherit;text-decoration:none"><div class="kic">${icon('calendar')}</div><span>${K.pend}</span><b class="money">${U.money(sum(pendL))}</b><small>${pendL.length ? pendL.length + ' pendente(s) • ver' : 'nada pendente'}</small></a>
+      <a class="kpi has-ic t-neg" href="#" data-quick="atrasada" style="color:inherit;text-decoration:none"><div class="kic">${icon('alert')}</div><span>${K.late}</span><b class="money ${lateL.length ? 'neg' : ''}">${U.money(sum(lateL))}</b><small>${lateL.length ? lateL.length + ' vencida(s) • ver' : 'nenhuma em atraso'}</small></a>
+    </div>`;
   }
-  function row(t, { accId = null, check = true } = {}) {
-    const isT = t.type === 'transferencia';
-    const v = signed(t, accId);
-    const cat = isT ? 'Transferência' : F.catName(t.category_id);
-    const color = isT ? '#2563eb' : F.catColor(t.category_id);
-    const where = isT ? `${F.accName(t.account_id)} → ${F.accName(t.to_account_id)}` : F.accName(t.account_id);
-    const pend = t.status === 'pendente';
-    return `<li class="tx ${pend ? 'pend' : ''}" data-id="${t.id}">
-      ${check ? `<input type="checkbox" data-sel="${t.id}" ${sel.has(t.id) ? 'checked' : ''} aria-label="Selecionar">` : ''}
-      <span class="ic" style="background:${esc(color)}">${isT ? icon('transfer') : UI.initials(cat)}</span>
-      <span class="info"><b>${esc(t.description)}</b><small>${esc(cat)} • ${esc(where)}${t.tags && t.tags.length ? ' • #' + t.tags.map(esc).join(' #') : ''}</small></span>
-      <span class="val"><span class="money ${isT && !accId ? '' : UI.moneyClass(v)}">${isT && !accId ? U.money(t.amount) : U.money(v)}</span>
-      ${pend ? `<small><button class="badge warn" data-toggle="${t.id}" title="Marcar como efetivado">${t.date < U.today() ? 'atrasado' : 'pendente'}</button></small>` : ''}</span>
-    </li>`;
-  }
-  function groupedList(list, opts = {}) {
-    if (!list.length) return '<p class="empty">Nenhum lançamento encontrado.</p>';
-    let h = '<ul class="txlist">'; let day = null; let dayTotal = 0; let buf = '';
-    const flush = () => { if (day) h += `<li class="txday"><span>${U.fmtDate(day)} • ${['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'][U.parseISO(day).getDay()]}</span><span class="money">${opts.accId || !opts.noTotals ? U.money(dayTotal) : ''}</span></li>` + buf; buf = ''; dayTotal = 0; };
-    list.forEach((t) => { if (t.date !== day) { flush(); day = t.date; } buf += row(t, opts); dayTotal += signed(t, opts.accId); });
-    flush();
-    return h + '</ul>';
+  /** Quadro "por categoria" (clicar filtra a lista) */
+  function byCategory(list) {
+    if (!list.length) return '';
+    const m = new Map(); list.forEach((t) => { const k = t.category_id || '__none'; m.set(k, (m.get(k) || 0) + t.amount); });
+    const tot = sum(list); const rows = [...m.entries()].sort((a, b) => b[1] - a[1]);
+    const top = rows.slice(0, 8);
+    return `<div class="card catsum"><div class="row between"><h3 style="margin:0">${K.title} por categoria</h3>${f.category ? '<button class="btn sm ghost" data-cat="">Mostrar todas</button>' : ''}</div>
+      <div class="catrows">${top.map(([id, v]) => { const p = tot ? v / tot * 100 : 0; const name = id === '__none' ? 'Sem categoria' : F.catName(id); const color = id === '__none' ? '#94a3b8' : F.catColor(id);
+        return `<button class="catrow ${f.category === id ? 'on' : ''}" data-cat="${esc(id)}" title="Filtrar por ${esc(name)}"><span class="dot" style="background:${esc(color)}"></span><span class="nm">${esc(name)}</span><span class="bar"><i style="width:${p.toFixed(1)}%;background:${esc(color)}"></i></span><span class="pc">${p.toFixed(0)}%</span><b class="money">${U.money(v)}</b></button>`; }).join('')}
+      ${rows.length > top.length ? `<p class="small muted" style="margin:6px 0 0">+ ${rows.length - top.length} outra(s) categoria(s)</p>` : ''}</div></div>`;
   }
 
   function render() {
     if (!f.month) f.month = App.state.month;
     const list = filtered();
-    const rec = list.filter((t) => t.type === 'receita').reduce((a, t) => a + t.amount, 0);
-    const desp = list.filter((t) => t.type === 'despesa').reduce((a, t) => a + t.amount, 0);
     const shown = list.slice(0, limit);
     const types = Object.entries(F.TX_TYPES).map(([k, v]) => UI.opt(k, v, f.type)).join('');
+    const statusOpts = kind
+      ? UI.opt('', 'Todas', f.status) + UI.opt('efetivada', kind === 'receita' ? 'Recebidas' : 'Pagas', f.status) + UI.opt('pendente', kind === 'receita' ? 'A receber' : 'A pagar', f.status) + UI.opt('atrasada', 'Atrasadas', f.status)
+      : UI.opt('', 'Todos os status', f.status) + UI.opt('efetivada', 'Efetivados', f.status) + UI.opt('pendente', 'Pendentes', f.status) + UI.opt('atrasada', 'Atrasados', f.status);
+    let kpis;
+    if (kind) kpis = kindKpis(list);
+    else {
+      const rec = sum(list.filter((t) => t.type === 'receita')), desp = sum(list.filter((t) => t.type === 'despesa'));
+      kpis = `<div class="kpis">
+      <div class="kpi"><span>Lançamentos</span><b>${list.length}</b></div>
+      <a class="kpi" href="#/receitas" style="color:inherit;text-decoration:none"><span>Receitas</span><b class="money pos">${U.money(rec)}</b><small>ver só receitas</small></a>
+      <a class="kpi" href="#/despesas" style="color:inherit;text-decoration:none"><span>Despesas</span><b class="money neg">${U.money(desp)}</b><small>ver só despesas</small></a>
+      <div class="kpi"><span>Resultado</span><b class="money ${UI.moneyClass(rec - desp)}">${U.money(rec - desp)}</b></div>
+    </div>`;
+    }
     return `
     <div class="filters">
       <div class="seg" data-mode>${[['month', 'Mês'], ['range', 'Período'], ['all', 'Tudo']].map(([k, v]) => `<button data-v="${k}" class="${f.mode === k ? 'on' : ''}">${v}</button>`).join('')}</div>
       ${f.mode === 'month' ? monthNav(f.month) : ''}
       ${f.mode === 'range' ? `<input type="date" class="input" data-f="from" value="${esc(f.from)}" aria-label="De"><input type="date" class="input" data-f="to" value="${esc(f.to)}" aria-label="Até">` : ''}
+      ${kind ? `<span class="spacer"></span><button class="btn ${kind === 'receita' ? 'btn-pos' : 'btn-neg'}" data-new>${icon('plus')}${K.novo}</button>` : ''}
     </div>
     <div class="filters">
       <input class="input search" data-f="q" placeholder="Buscar descrição, categoria, valor…" value="${esc(f.q)}">
       <select class="input" data-f="account">${UI.accountOptions(f.account, { all: true, archived: true })}</select>
-      <select class="input" data-f="category">${UI.opt('', 'Todas as categorias', f.category)}${UI.opt('__none', 'Sem categoria', f.category)}${F.categories().map((c) => UI.opt(c.id, c.name, f.category)).join('')}</select>
-      <select class="input" data-f="type">${UI.opt('', 'Todos os tipos', f.type)}${types}</select>
-      <select class="input" data-f="status">${UI.opt('', 'Todos os status', f.status)}${UI.opt('efetivada', 'Efetivados', f.status)}${UI.opt('pendente', 'Pendentes', f.status)}</select>
+      <select class="input" data-f="category">${UI.opt('', 'Todas as categorias', f.category)}${UI.opt('__none', 'Sem categoria', f.category)}${F.categories(kind || undefined).map((c) => UI.opt(c.id, c.name, f.category)).join('')}</select>
+      ${kind ? '' : `<select class="input" data-f="type">${UI.opt('', 'Todos os tipos', f.type)}${types}</select>`}
+      <select class="input" data-f="status">${statusOpts}</select>
     </div>
-    <div class="kpis">
-      <div class="kpi"><span>Lançamentos</span><b>${list.length}</b></div>
-      <div class="kpi"><span>Receitas</span><b class="money pos">${U.money(rec)}</b></div>
-      <div class="kpi"><span>Despesas</span><b class="money neg">${U.money(desp)}</b></div>
-      <div class="kpi"><span>Resultado</span><b class="money ${UI.moneyClass(rec - desp)}">${U.money(rec - desp)}</b></div>
-    </div>
+    ${kpis}
+    ${kind ? byCategory(list) : ''}
     ${sel.size ? `<div class="selbar row"><b>${sel.size} selecionado(s)</b><span class="spacer"></span>
-      <button class="btn sm" data-bulk="done">${icon('check')}Efetivar</button><button class="btn sm" data-bulk="pend">Pendente</button>
+      <button class="btn sm" data-bulk="done">${icon('check')}${kind === 'receita' ? 'Recebido' : kind === 'despesa' ? 'Pago' : 'Efetivar'}</button><button class="btn sm" data-bulk="pend">Pendente</button>
       <button class="btn sm" data-bulk="cat">Categoria…</button><button class="btn sm" data-bulk="acc">Conta…</button><button class="btn sm danger" data-bulk="del">${icon('trash')}Excluir</button><button class="btn sm ghost" data-bulk="clear">Limpar</button></div>` : ''}
     <div class="card">
       <div class="row between" style="margin-bottom:4px">
         <label class="check small"><input type="checkbox" data-selall ${shown.length && shown.every((t) => sel.has(t.id)) ? 'checked' : ''}> Selecionar todos</label>
-        <div class="row"><button class="btn sm" data-exp="pdf">${icon('pdf')}PDF</button><button class="btn sm" data-exp="xlsx">${icon('sheet')}Excel</button><button class="btn sm" data-exp="csv">CSV</button><button class="btn sm primary" data-new>${icon('plus')}Novo</button></div>
+        <div class="row"><button class="btn sm" data-exp="pdf">${icon('pdf')}PDF</button><button class="btn sm" data-exp="xlsx">${icon('sheet')}Excel</button><button class="btn sm" data-exp="csv">CSV</button>${kind ? '' : `<button class="btn sm primary" data-new>${icon('plus')}Novo</button>`}</div>
       </div>
-      ${groupedList(shown, { accId: f.account || null })}
+      ${groupedList(shown, { accId: f.account || null, sel, kind, emptyText: kind ? `Nenhuma ${K.one} encontrada neste período.` : '' })}
       ${list.length > limit ? `<div class="center" style="margin-top:10px"><button class="btn" data-more>Mostrar mais (${list.length - limit} restantes)</button></div>` : ''}
     </div>`;
-  }
-
-  function bindList(root, accId) {
-    root.addEventListener('click', async (e) => {
-      const tg = e.target.closest('[data-toggle]');
-      if (tg) { e.stopPropagation(); const t = Store.get('transactions', tg.dataset.toggle); await Store.upsert('transactions', { ...t, status: 'efetivada' }); UI.toast('Marcado como efetivado', 'ok'); return; }
-      if (e.target.matches('[data-sel]')) { e.stopPropagation(); return; }
-      const li = e.target.closest('.tx[data-id]');
-      if (li) form(Store.get('transactions', li.dataset.id), {}, accId);
-    });
-    root.addEventListener('change', (e) => {
-      if (e.target.matches('[data-sel]')) { e.target.checked ? sel.add(e.target.dataset.sel) : sel.delete(e.target.dataset.sel); App.render(); }
-    });
   }
 
   function bind(root) {
@@ -117,29 +175,31 @@ Views.lancamentos = (() => {
       const ev = el.dataset.f === 'q' ? 'input' : 'change';
       el.addEventListener(ev, U.debounce(() => { f[el.dataset.f] = el.value; limit = 300; App.render(); const q = $('[data-f=q]'); if (el.dataset.f === 'q' && q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }, el.dataset.f === 'q' ? 300 : 0));
     });
-    bindList(root, f.account || null);
+    $$('[data-cat]', root).forEach((b) => (b.onclick = () => { f.category = f.category === b.dataset.cat ? '' : b.dataset.cat; limit = 300; App.render(); }));
+    $$('[data-quick]', root).forEach((b) => (b.onclick = (e) => { e.preventDefault(); f.status = f.status === b.dataset.quick ? '' : b.dataset.quick; limit = 300; App.render(); }));
+    bindList(root, f.account || null, sel);
     const more = $('[data-more]', root); if (more) more.onclick = () => { limit += 500; App.render(); };
-    $('[data-new]', root).onclick = () => form(null, f.account ? { account_id: f.account } : {});
+    $$('[data-new]', root).forEach((b) => (b.onclick = () => form(null, { ...(kind ? { type: kind } : {}), ...(f.account ? { account_id: f.account } : {}) })));
     const sa = $('[data-selall]', root);
     if (sa) sa.onchange = () => { const shown = filtered().slice(0, limit); if (sa.checked) shown.forEach((t) => sel.add(t.id)); else sel.clear(); App.render(); };
     $$('[data-bulk]', root).forEach((b) => (b.onclick = () => bulk(b.dataset.bulk)));
     $$('[data-exp]', root).forEach((b) => (b.onclick = () => exportList(b.dataset.exp)));
   }
 
-  async function bulk(kind) {
+  async function bulk(op) {
     const ids = [...sel].filter((id) => Store.get('transactions', id));
-    if (kind === 'clear') { sel.clear(); return App.render(); }
-    if (kind === 'del') {
+    if (op === 'clear') { sel.clear(); return App.render(); }
+    if (op === 'del') {
       if (!(await UI.confirm(`Excluir ${ids.length} lançamento(s)? Esta ação não pode ser desfeita.`, { ok: 'Excluir', danger: true }))) return;
       await Store.removeMany('transactions', ids); sel.clear(); UI.toast('Lançamentos excluídos', 'ok'); return;
     }
-    if (kind === 'done' || kind === 'pend') {
-      await Store.upsertMany('transactions', ids.map((id) => ({ ...Store.get('transactions', id), status: kind === 'done' ? 'efetivada' : 'pendente' })));
+    if (op === 'done' || op === 'pend') {
+      await Store.upsertMany('transactions', ids.map((id) => ({ ...Store.get('transactions', id), status: op === 'done' ? 'efetivada' : 'pendente' })));
       sel.clear(); UI.toast('Status atualizado', 'ok'); return;
     }
-    if (kind === 'cat') {
+    if (op === 'cat') {
       UI.modal({
-        title: 'Alterar categoria', body: `<label class="field"><span>Nova categoria (aplicada a receitas/despesas selecionadas)</span><select class="input" id="bc">${UI.categoryOptions(null, '', { none: true })}</select></label>`,
+        title: 'Alterar categoria', body: `<label class="field"><span>Nova categoria (aplicada a receitas/despesas selecionadas)</span><select class="input" id="bc">${UI.categoryOptions(kind || null, '', { none: true })}</select></label>`,
         actions: [{ label: 'Cancelar' }, { label: 'Aplicar', cls: 'primary', onClick: async (b) => {
           const c = $('#bc', b).value; const cat = c ? Store.get('categories', c) : null;
           const upd = ids.map((id) => Store.get('transactions', id)).filter((t) => t.type !== 'transferencia' && (!cat || cat.type === 'ambos' || cat.type === t.type)).map((t) => ({ ...t, category_id: c || null }));
@@ -148,7 +208,7 @@ Views.lancamentos = (() => {
         } }],
       });
     }
-    if (kind === 'acc') {
+    if (op === 'acc') {
       UI.modal({
         title: 'Mover para outra conta', body: `<label class="field"><span>Conta</span><select class="input" id="ba">${UI.accountOptions('')}</select></label><p class="small muted">Transferências não são alteradas.</p>`,
         actions: [{ label: 'Cancelar' }, { label: 'Mover', cls: 'primary', onClick: async (b) => {
@@ -168,14 +228,20 @@ Views.lancamentos = (() => {
     const tbl = R.sections.find((s) => s.kind === 'table');
     const accId = f.account || null;
     tbl.rows = list.map((t) => [t.date, t.description, F.TX_TYPES[t.type], t.type === 'transferencia' ? `${F.accName(t.account_id)} → ${F.accName(t.to_account_id)}` : F.catName(t.category_id), t.type === 'transferencia' ? '' : F.accName(t.account_id), t.type === 'transferencia' ? (accId ? F.effect(t, accId) : t.amount) : signed(t), t.status === 'pendente' ? 'Pendente' : 'Efetivada']);
-    const rec = list.filter((t) => t.type === 'receita').reduce((a, t) => a + t.amount, 0), desp = list.filter((t) => t.type === 'despesa').reduce((a, t) => a + t.amount, 0);
-    R.sections[0].items = [{ label: 'Lançamentos', text: String(list.length) }, { label: 'Receitas', value: rec, cls: 'pos' }, { label: 'Despesas', value: desp, cls: 'neg' }, { label: 'Resultado', value: rec - desp, cls: rec - desp >= 0 ? 'pos' : 'neg' }];
-    R.subtitle = [f.mode === 'all' ? 'Todo o período' : `${U.fmtDate(from)} a ${U.fmtDate(to)}`, f.account ? 'Conta: ' + F.accName(f.account) : '', f.q ? 'Busca: ' + f.q : ''].filter(Boolean).join(' • ');
-    const name = 'lancamentos-' + U.fileStamp();
+    const rec = sum(list.filter((t) => t.type === 'receita')), desp = sum(list.filter((t) => t.type === 'despesa'));
+    if (kind) {
+      const tot = kind === 'receita' ? rec : desp, pend = sum(list.filter((t) => t.status === 'pendente'));
+      R.title = K.title;
+      R.sections[0].items = [{ label: K.title, text: String(list.length) }, { label: 'Total', value: tot, cls: K.cls }, { label: K.done, value: tot - pend }, { label: K.pend, value: pend }];
+    } else R.sections[0].items = [{ label: 'Lançamentos', text: String(list.length) }, { label: 'Receitas', value: rec, cls: 'pos' }, { label: 'Despesas', value: desp, cls: 'neg' }, { label: 'Resultado', value: rec - desp, cls: rec - desp >= 0 ? 'pos' : 'neg' }];
+    R.subtitle = [f.mode === 'all' ? 'Todo o período' : `${U.fmtDate(from)} a ${U.fmtDate(to)}`, f.account ? 'Conta: ' + F.accName(f.account) : '', f.category ? 'Categoria: ' + (f.category === '__none' ? 'Sem categoria' : F.catName(f.category)) : '', f.q ? 'Busca: ' + f.q : ''].filter(Boolean).join(' • ');
+    const name = (kind ? K.title.toLowerCase() : 'lancamentos') + '-' + U.fileStamp();
     const p = fmt === 'pdf' ? Reports.toPDF(R, name) : fmt === 'xlsx' ? Reports.toXLSX(R, name) : Reports.toCSV(R, name);
     Promise.resolve(p).then((r) => UI.toast(typeof r === 'string' ? 'Salvo em ' + r : 'Arquivo gerado', 'ok')).catch((e) => UI.toast(e.message, 'error'));
   }
 
+  return { title: kind ? K.title : 'Todos os lançamentos', render, bind, setFilter, form, row, groupedList, bindList, signed };
+  }
   // ---------------- formulário ----------------
   function form(tx = null, preset = {}, ctxAccount = null) {
     const accs = F.accounts();
@@ -210,7 +276,7 @@ Views.lancamentos = (() => {
     if (isNew) actions.push({ label: 'Salvar e novo', onClick: async (b) => { if (!(await save(b))) return false; setTimeout(() => form(null, { type: t.type, account_id: $('#ta', b).value, date: $('#td', b).value }), 0); } });
     actions.push({ label: 'Salvar', cls: 'primary', onClick: (b) => save(b) });
 
-    UI.modal({ title: isNew ? 'Novo lançamento' : 'Editar lançamento', body, actions, onOpen: (b) => {
+    UI.modal({ title: isNew ? (NEW_TITLE[t.type] || 'Novo lançamento') : 'Editar ' + (F.TX_TYPES[t.type] || 'lançamento').toLowerCase(), body, actions, onOpen: (b) => {
       const setType = (tp) => {
         t.type = tp;
         $$('#tt button', b).forEach((x) => x.classList.toggle('on', x.dataset.v === tp));
@@ -282,5 +348,9 @@ Views.lancamentos = (() => {
     await Store.remove('transactions', t.id); UI.toast('Lançamento excluído', 'ok'); return true;
   }
 
-  return { title: 'Lançamentos', render, bind, form, row, groupedList, bindList, setFilter, signed };
+  return { screen, form, row, groupedList, bindList, signed, removeTx, NEW_TITLE };
 })();
+
+Views.lancamentos = TxScreens.screen(null);
+Views.receitas = TxScreens.screen('receita');
+Views.despesas = TxScreens.screen('despesa');

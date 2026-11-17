@@ -15,6 +15,7 @@ Com a sincronização ativada (Supabase, gratuito), o que você lança no comput
 ## 1. Funcionalidades
 
 - **Contas e saldos**: conta corrente, poupança, carteira, investimentos e cartões de crédito. Cada conta mostra o **saldo atual** (só o que já foi pago ou recebido) e o **saldo previsto** (inclui os pendentes). Há **ajuste de saldo** para igualar ao banco e opção de arquivar contas.
+- **Receitas e Despesas em telas separadas**: cada uma mostra só o seu tipo, com total do mês (e comparação com o mês anterior), quanto já foi recebido/pago, quanto falta receber/pagar, o que está atrasado e um quadro **por categoria** (toque numa categoria para filtrar a lista). O botão **+** já abre como receita ou despesa conforme a tela em que você está. A tela **Todos os lançamentos** continua com tudo junto, incluindo transferências.
 - **Lançamentos**: receitas, despesas e transferências. Têm status pago/pendente, observações e etiquetas. Podem ser **parcelados** (o valor é dividido e a diferença de centavos fica na 1ª parcela) ou **recorrentes** (mensal, semanal, quinzenal, anual). A lista tem filtros, busca (inclusive por valor) e ações em lote.
 - **Cartão de crédito**: limite usado e disponível, **faturas** por ciclo (pelo dia de fechamento e de vencimento), situação (aberta, fechada, paga) e botão "Pagar fatura".
 - **Importação de extratos**:
@@ -175,6 +176,8 @@ Para liberar conexões reais no painel da Pluggy (`dashboard.pluggy.ai`), o chec
 7. **No app:** em **Configurações → Sincronização**, use **Criar conta** com o e-mail informado em `ALLOWED_EMAILS` e depois **Entrar e sincronizar**. Em seguida abra **Open Finance → Conectar banco**.
 
 **Segurança:**
+- Nenhuma chave secreta fica no repositório. O `www/config.js` tem só a chave **anon** do Supabase, que é pública por natureza (a proteção vem do login e das regras RLS). Nunca coloque a chave `service_role`, o Client Secret da Pluggy ou tokens em arquivos do repositório: use **Secrets** do GitHub/Supabase.
+- O repositório é **público** e contém a chave de assinatura de **depuração** do Android (`android-signing/debug.keystore`). Ela permite instalar atualizações por cima, mas qualquer pessoa pode assinar um APK com ela. Instale o APK só a partir das **Releases** deste repositório.
 - Só os e-mails em `ALLOWED_EMAILS` conseguem usar a função.
 - Cada login só enxerga as conexões vinculadas a ele.
 - Depois de criar sua conta, você pode desligar novos cadastros no Supabase: **Authentication → Sign In / Providers → Allow new users to sign up**.
@@ -182,6 +185,15 @@ Para liberar conexões reais no painel da Pluggy (`dashboard.pluggy.ai`), o chec
 **Plano gratuito da Pluggy:** não foi possível confirmar se a tela de conexão dentro de outro app está incluída no plano gratuito. Se a Pluggy recusar, há duas saídas:
 - conecte o banco no **Meu Pluggy** (<https://meu.pluggy.ai>) e use **"Já conectei um banco no Meu Pluggy: vincular pelo ID"** na tela Open Finance;
 - use o **modo avançado**, com as chaves guardadas no aparelho.
+
+**Chaves da Pluggy erradas ou trocadas:** a tela Open Finance confere as chaves com a Pluggy toda vez que abre. Se forem recusadas, ela mostra o motivo e um formulário para cadastrar o par correto. As chaves cadastradas pelo app **têm prioridade** sobre os secrets `PLUGGY_CLIENT_ID`/`PLUGGY_CLIENT_SECRET`, então dá para corrigir sem mexer no Supabase. Também dá para trocar a qualquer momento em **Open Finance → Trocar as chaves da Pluggy do servidor**.
+
+**Modo avançado (Client ID e Client Secret no aparelho, sem servidor):**
+1. Em **Open Finance**, abra *Modo avançado* e marque **Usar chaves da Pluggy guardadas neste aparelho**.
+2. Cole o **Client ID** e o **Client Secret** da **mesma** aplicação em dashboard.pluggy.ai e toque em **Testar e salvar**. As chaves só são gravadas se a Pluggy aceitar; se recusar, o motivo aparece na tela.
+3. Toque em **Conectar banco**. A conexão é criada com as suas chaves, então os lançamentos são importados na hora.
+- Funciona no app do **Windows** e do **Android**. No navegador, a Pluggy bloqueia chamadas diretas (CORS).
+- Um ID de conexão (item) só pode ser usado com as chaves da **mesma aplicação** que o criou. Um item criado pela *Demo* do painel pertence a outra aplicação e dá "não encontrado/sem permissão"; por isso prefira **Conectar banco**.
 
 Observações:
 - Lançamentos ainda **pendentes** no banco ficam de fora e entram quando forem confirmados.
