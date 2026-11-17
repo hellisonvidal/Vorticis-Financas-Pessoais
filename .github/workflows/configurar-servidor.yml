@@ -12,6 +12,12 @@ on:
     branches: [main]
     paths: ['supabase/**', '.github/workflows/configurar-servidor.yml']
 
+# Um deploy por vez: duas execuções juntas fazem o Supabase recusar com 409
+# ("Function was deployed concurrently"). A segunda espera a primeira terminar.
+concurrency:
+  group: configurar-servidor
+  cancel-in-progress: false
+
 jobs:
   servidor:
     name: Publicar tabelas e função do Open Finance
@@ -72,8 +78,10 @@ jobs:
       - name: Publicar as funções "pluggy" e "pluggy-webhook"
         if: steps.chk.outputs.ok == 'true'
         run: |
-          npx --yes supabase@2.122.0 functions deploy pluggy --project-ref "$SUPABASE_PROJECT_REF" --use-api
-          npx --yes supabase@2.122.0 functions deploy pluggy-webhook --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt --use-api
+          # tenta de novo se o Supabase ainda estiver processando outro deploy (HTTP 409)
+          deploy() { for i in 1 2 3 4; do npx --yes supabase@2.122.0 functions deploy "$@" --project-ref "$SUPABASE_PROJECT_REF" --use-api && return 0; echo "Tentativa $i falhou; nova tentativa em 20 s"; sleep 20; done; return 1; }
+          deploy pluggy
+          deploy pluggy-webhook --no-verify-jwt
 
       - name: Testar as funções publicadas
         if: steps.chk.outputs.ok == 'true'

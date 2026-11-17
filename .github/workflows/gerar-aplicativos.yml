@@ -15,6 +15,11 @@ on:
 permissions:
   contents: write
 
+# Uma compilação por ramo de cada vez: evita duas versões publicadas fora de ordem
+concurrency:
+  group: gerar-aplicativos-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   android:
     name: Android (APK)
