@@ -99,8 +99,8 @@ const Reports = (() => {
       const list = F.txs().filter((t) => t.date >= p.from && t.date <= p.to && (!p.account || t.account_id === p.account || t.to_account_id === p.account) && (!p.onlyDone || F.isDone(t))).sort((a, b) => a.date.localeCompare(b.date));
       let rec = 0, desp = 0;
       const rows = list.map((t) => {
-        if (t.type === 'receita') rec += t.amount; else if (t.type === 'despesa') desp += t.amount;
-        const v = t.type === 'transferencia' ? (p.account ? F.effect(t, p.account) : t.amount) : t.type === 'receita' ? t.amount : -t.amount;
+        if (F.counted(t, { includeAdjust: true })) { if (t.type === 'receita') rec += F.val(t); else if (t.type === 'despesa') desp += F.val(t); }
+        const v = t.type === 'transferencia' ? (p.account ? F.effect(t, p.account) : t.amount) : (t.type === 'receita' ? 1 : -1) * F.val(t);
         return [t.date, t.description, F.TX_TYPES[t.type], t.type === 'transferencia' ? `${F.accName(t.account_id)} → ${F.accName(t.to_account_id)}` : F.catName(t.category_id), t.type === 'transferencia' ? '' : F.accName(t.account_id), v, t.status === 'pendente' ? 'Pendente' : 'Efetivada'];
       });
       R.sections.push({ kind: 'kpis', items: [{ label: 'Lançamentos', text: String(list.length) }, { label: 'Receitas', value: rec, cls: 'pos' }, { label: 'Despesas', value: desp, cls: 'neg' }, { label: 'Resultado', value: rec - desp, cls: rec - desp >= 0 ? 'pos' : 'neg' }] });
@@ -131,7 +131,7 @@ const Reports = (() => {
       const inv = F.invoices(acc.id).slice(0, 24);
       R.sections.push({ kind: 'table', title: 'Faturas', columns: [col('Fatura'), col('Vencimento', D), col('Compras', M), col('Créditos/estornos', M), col('Total', M), col('Pago', M), col('Situação')], rows: inv.map((i) => [U.fmtMonth(i.ym), i.vencimento, i.compras, i.creditos, i.total, i.paid, i.status]) });
       const cur = inv.find((i) => i.ym === (p.month || F.invoiceMonth(acc, U.today())));
-      if (cur) R.sections.push({ kind: 'table', title: 'Itens da fatura de ' + U.fmtMonth(cur.ym), columns: [col('Data', D), col('Descrição'), col('Categoria'), col('Valor', M)], rows: cur.itens.sort((a, b) => a.date.localeCompare(b.date)).map((t) => [t.date, t.description, t.type === 'transferencia' ? 'Pagamento' : F.catName(t.category_id), t.type === 'receita' || (t.type === 'transferencia' && t.to_account_id === acc.id) ? -t.amount : t.amount]), foot: ['', 'Total da fatura', '', cur.total] });
+      if (cur) R.sections.push({ kind: 'table', title: 'Itens da fatura de ' + U.fmtMonth(cur.ym), columns: [col('Data', D), col('Descrição'), col('Categoria'), col('Valor', M)], rows: cur.itens.sort((a, b) => a.date.localeCompare(b.date)).map((t) => [t.date, t.description, t.type === 'transferencia' ? 'Pagamento' : F.catName(t.category_id), t.type === 'receita' || (t.type === 'transferencia' && t.to_account_id === acc.id) ? -F.val(t) : F.val(t)]), foot: ['', 'Total da fatura', '', cur.total] });
     }
     if (type === 'dividas') {
       const o = Debts.overview();
@@ -140,7 +140,7 @@ const Reports = (() => {
       R.sections.push({ kind: 'kpis', items: [{ label: 'Total em dívidas', value: o.total, cls: 'neg' }, { label: 'Parcelas por mês', value: o.monthly }, { label: 'Em atraso', value: o.overdue, cls: o.overdue ? 'neg' : '' },
         { label: 'Comprometimento da renda', text: o.ratio === null ? '—' : (o.ratio * 100).toFixed(1).replace('.', ',') + '%' }] });
       const rows = o.debts.map((d) => [d.name, d.creditor || '', Debts.KINDS[d.kind] || '', Debts.STATUS[d.status] || '', d.balance || 0, d.overdue || 0, d.installment || 0, d.rate ? d.rate.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + '%' : '', d.remaining || '', Debts.SOURCES[d.source] || ''])
-        .concat(o.cards.map((c) => [c.name, c.creditor || '', 'Cartão de crédito (fatura)', 'Automático', c.balance, 0, 0, '', '', 'Contas e cartões']));
+        .concat(o.cards.map((c) => [c.name, c.creditor || '', 'Cartão de crédito (fatura)', 'Automático', c.balance, 0, 0, '', '', 'Cartões de crédito']));
       R.sections.push({ kind: 'table', title: 'Dívidas em aberto', columns: [col('Dívida'), col('Credor'), col('Tipo'), col('Situação'), col('Saldo devedor', M), col('Vencido', M), col('Parcela', M), col('Juros a.m.', 'text', 'right'), col('Restam', 'int', 'right'), col('Origem')], rows,
         foot: ['Total', '', '', '', o.total, o.overdue, o.monthly, '', '', ''] });
       const plans = [['minimo', 'Só as parcelas'], ['avalanche', 'Maiores juros primeiro'], ['bolaneve', 'Menores saldos primeiro']].map(([k, n]) => { const r = Debts.simulate(o.all, { strategy: k, extra: 0 }); return [n, r.feasible ? r.months : 'não quita', r.feasible ? U.fmtMonth(U.addMonthYM(U.monthOf(U.today()), r.months)) : '—', r.interest, r.budget]; });

@@ -12,7 +12,7 @@ const TxScreens = (() => {
 
   function signed(t, accId) {
     if (t.type === 'transferencia') return accId ? F.effect(t, accId) : 0;
-    return t.type === 'receita' ? t.amount : -t.amount;
+    return (t.type === 'receita' ? 1 : -1) * F.val(t);
   }
   function row(t, { accId = null, check = true, sel = null, kind = null } = {}) {
     const isT = t.type === 'transferencia';
@@ -22,13 +22,14 @@ const TxScreens = (() => {
     const where = isT ? `${F.accName(t.account_id)} → ${F.accName(t.to_account_id)}` : F.accName(t.account_id);
     const pend = t.status === 'pendente';
     // nas telas de Receitas/Despesas o valor aparece sem sinal (a tela já diz o que é)
-    const shown = kind && !accId ? U.money(t.amount) : isT && !accId ? U.money(t.amount) : U.money(v);
-    const mcls = kind ? KIND[kind].cls : isT && !accId ? '' : UI.moneyClass(v);
+    const shown = kind && !accId ? U.money(F.val(t)) : isT && !accId ? U.money(t.amount) : U.money(v);
+    const mcls = kind ? (t.estorno ? 'muted' : KIND[kind].cls) : isT && !accId ? '' : UI.moneyClass(v);
+    const tagsX = (t.estorno ? ' <span class="badge info">estorno</span>' : '') + (!F.counted(t) && F.isCardCredit(t) ? ' <span class="badge" title="Crédito no cartão: não entra como receita (Configurações)">não é receita</span>' : '') + (F.isParcelado(t) ? ' <span class="badge">parcelado</span>' : '');
     const pendLabel = t.date < U.today() ? 'atrasado' : t.type === 'receita' ? 'a receber' : t.type === 'despesa' ? 'a pagar' : 'pendente';
     return `<li class="tx ${pend ? 'pend' : ''}" data-id="${t.id}">
       ${check ? `<input type="checkbox" data-sel="${t.id}" ${sel && sel.has(t.id) ? 'checked' : ''} aria-label="Selecionar">` : ''}
       <span class="ic" style="background:${esc(color)}">${isT ? icon('transfer') : UI.initials(cat)}</span>
-      <span class="info"><b>${esc(t.description)}</b><small>${esc(cat)} • ${esc(where)}${t.tags && t.tags.length ? ' • #' + t.tags.map(esc).join(' #') : ''}</small></span>
+      <span class="info"><b>${esc(t.description)}${tagsX}</b><small>${esc(cat)} • ${esc(where)}${t.tags && t.tags.length ? ' • #' + t.tags.map(esc).join(' #') : ''}</small></span>
       <span class="val"><span class="money ${mcls}">${shown}</span>
       ${pend ? `<small><button class="badge warn" data-toggle="${t.id}" title="Marcar como ${t.type === 'receita' ? 'recebido' : 'pago'}">${pendLabel}</button></small>` : ''}</span>
     </li>`;
@@ -36,7 +37,7 @@ const TxScreens = (() => {
   function groupedList(list, opts = {}) {
     if (!list.length) return `<p class="empty">${opts.emptyText || 'Nenhum lançamento encontrado.'}</p>`;
     let h = '<ul class="txlist">'; let day = null; let dayTotal = 0; let buf = '';
-    const val = (t) => (opts.kind && !opts.accId ? t.amount : signed(t, opts.accId));
+    const val = (t) => (opts.kind && !opts.accId ? F.val(t) : signed(t, opts.accId));
     const flush = () => { if (day) h += `<li class="txday"><span>${U.fmtDate(day)} • ${['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'][U.parseISO(day).getDay()]}</span><span class="money">${opts.accId || !opts.noTotals ? U.money(dayTotal) : ''}</span></li>` + buf; buf = ''; dayTotal = 0; };
     list.forEach((t) => { if (t.date !== day) { flush(); day = t.date; } buf += row(t, opts); dayTotal += val(t); });
     flush();
@@ -60,11 +61,11 @@ const TxScreens = (() => {
    *  embedded = lista dentro do Painel (usa o mês do Painel e não repete os indicadores) */
   function screen(kind, { embedded = false } = {}) {
   const K = kind ? KIND[kind] : null;
-  const f = { mode: 'month', month: null, from: '', to: '', account: '', category: '', type: kind || '', status: '', q: '' };
+  const f = { mode: 'month', month: null, from: '', to: '', account: '', category: '', type: kind || '', status: '', q: '', parc: false };
   const sel = new Set();
   let limit = 300;
 
-  function setFilter(o) { Object.assign(f, { account: '', category: '', type: kind || '', status: '', q: '' }, o); if (kind) f.type = kind; sel.clear(); limit = 300; }
+  function setFilter(o) { Object.assign(f, { account: '', category: '', type: kind || '', status: '', q: '', parc: false }, o); if (kind) f.type = kind; sel.clear(); limit = 300; }
 
 
   function range() {
@@ -78,6 +79,8 @@ const TxScreens = (() => {
     return F.txs().filter((t) => {
       if (t.date < from || t.date > to) return false;
       if (kind && t.type !== kind) return false;
+      if (kind && !F.counted(t, { includeAdjust: true })) return false; // ex.: crédito no cartão, se não for receita
+      if (f.parc && !F.isParcelado(t)) return false;
       if (f.account && t.account_id !== f.account && t.to_account_id !== f.account) return false;
       if (f.category && (f.category === '__none' ? t.category_id || t.type === 'transferencia' : t.category_id !== f.category)) return false;
       if (f.type && t.type !== f.type) return false;
@@ -90,7 +93,8 @@ const TxScreens = (() => {
       return true;
     }).sort((a, b) => b.date.localeCompare(a.date) || (b.created_at || '').localeCompare(a.created_at || ''));
   }
-  const sum = (l) => l.reduce((a, t) => a + t.amount, 0);
+  const sum = (l) => l.reduce((a, t) => a + F.val(t), 0);
+  const cnt = (t) => F.counted(t, { includeAdjust: true });
 
   /** Indicadores da tela de Receitas/Despesas */
   function kindKpis(list) {
@@ -99,7 +103,7 @@ const TxScreens = (() => {
     let cmp = '';
     if (f.mode === 'month' && !f.q && !f.category && !f.account && !f.status) {
       const prev = U.addMonthYM(f.month, -1), [a, b] = [U.monthStart(prev), U.monthEnd(prev)];
-      const pt = sum(F.txs().filter((t) => t.type === kind && t.date >= a && t.date <= b));
+      const pt = sum(F.txs().filter((t) => t.type === kind && t.date >= a && t.date <= b && cnt(t)));
       if (pt) { const d = Math.round((total - pt) / pt * 100); cmp = d === 0 ? 'igual a ' + U.fmtMonth(prev).toLowerCase() : `${d > 0 ? '+' : ''}${d}% vs ${U.fmtMonth(prev).toLowerCase()}`; }
     }
     return `<div class="kpis">
@@ -112,8 +116,8 @@ const TxScreens = (() => {
   /** Quadro "por categoria" (clicar filtra a lista) */
   function byCategory(list) {
     if (!list.length) return '';
-    const m = new Map(); list.forEach((t) => { const k = t.category_id || '__none'; m.set(k, (m.get(k) || 0) + t.amount); });
-    const tot = sum(list); const rows = [...m.entries()].sort((a, b) => b[1] - a[1]);
+    const m = new Map(); list.forEach((t) => { const k = t.category_id || '__none'; m.set(k, (m.get(k) || 0) + F.val(t)); });
+    const tot = sum(list); const rows = [...m.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
     const top = rows.slice(0, 8);
     return `<div class="card catsum"><div class="row between"><h3 style="margin:0">${K.title} por categoria</h3>${f.category ? '<button class="btn sm ghost" data-cat="">Mostrar todas</button>' : ''}</div>
       <div class="catrows">${top.map(([id, v]) => { const p = tot ? v / tot * 100 : 0; const name = id === '__none' ? 'Sem categoria' : F.catName(id); const color = id === '__none' ? '#94a3b8' : F.catColor(id);
@@ -121,6 +125,11 @@ const TxScreens = (() => {
       ${rows.length > top.length ? `<p class="small muted" style="margin:6px 0 0">+ ${rows.length - top.length} outra(s) categoria(s)</p>` : ''}</div></div>`;
   }
 
+  function cardNote() {
+    if (F.cardCreditIsIncome()) return '';
+    const [a0, b0] = range(); const n = F.txs().filter((t) => F.isCardCredit(t) && t.date >= a0 && t.date <= b0).length;
+    return n ? `<p class="small muted" style="margin:-6px 0 12px">${n} crédito(s) em cartão de crédito no período não contam como receita. <a href="#/config">Mudar em Configurações</a></p>` : '';
+  }
   function render() {
     if (!f.month || embedded) f.month = App.state.month;
     const list = filtered();
@@ -132,7 +141,7 @@ const TxScreens = (() => {
     let kpis;
     if (kind) kpis = kindKpis(list);
     else {
-      const rec = sum(list.filter((t) => t.type === 'receita')), desp = sum(list.filter((t) => t.type === 'despesa'));
+      const rec = sum(list.filter((t) => t.type === 'receita' && cnt(t))), desp = sum(list.filter((t) => t.type === 'despesa' && cnt(t)));
       kpis = `<div class="kpis">
       <div class="kpi"><span>Lançamentos</span><b>${list.length}</b></div>
       <a class="kpi" href="#/receitas" style="color:inherit;text-decoration:none"><span>Receitas</span><b class="money pos">${U.money(rec)}</b><small>ver só receitas</small></a>
@@ -153,8 +162,10 @@ const TxScreens = (() => {
       <select class="input" data-f="category">${UI.opt('', 'Todas as categorias', f.category)}${UI.opt('__none', 'Sem categoria', f.category)}${F.categories(kind || undefined).map((c) => UI.opt(c.id, c.name, f.category)).join('')}</select>
       ${kind ? '' : `<select class="input" data-f="type">${UI.opt('', 'Todos os tipos', f.type)}${types}</select>`}
       <select class="input" data-f="status">${statusOpts}</select>
+      <label class="check small chipcheck"><input type="checkbox" data-parc ${f.parc ? 'checked' : ''}> Só parcelados</label>
     </div>
-    ${embedded ? `<p class="small muted" style="margin:-4px 0 10px">${list.length} lançamento(s) • receitas <b class="money pos">${U.money(sum(list.filter((t) => t.type === 'receita')))}</b> • despesas <b class="money neg">${U.money(sum(list.filter((t) => t.type === 'despesa')))}</b></p>` : kpis}
+    ${kind === 'receita' ? cardNote() : ''}
+    ${embedded ? `<p class="small muted" style="margin:-4px 0 10px">${list.length} lançamento(s) • receitas <b class="money pos">${U.money(sum(list.filter((t) => t.type === 'receita' && cnt(t))))}</b> • despesas <b class="money neg">${U.money(sum(list.filter((t) => t.type === 'despesa' && cnt(t))))}</b></p>` : kpis}
     ${kind ? byCategory(list) : ''}
     ${sel.size ? `<div class="selbar row"><b>${sel.size} selecionado(s)</b><span class="spacer"></span>
       <button class="btn sm" data-bulk="done">${icon('check')}${kind === 'receita' ? 'Recebido' : kind === 'despesa' ? 'Pago' : 'Efetivar'}</button><button class="btn sm" data-bulk="pend">Pendente</button>
@@ -162,7 +173,7 @@ const TxScreens = (() => {
     <div class="card">
       <div class="row between" style="margin-bottom:4px">
         <label class="check small"><input type="checkbox" data-selall ${shown.length && shown.every((t) => sel.has(t.id)) ? 'checked' : ''}> Selecionar todos</label>
-        <div class="row"><button class="btn sm" data-exp="pdf">${icon('pdf')}PDF</button><button class="btn sm" data-exp="xlsx">${icon('sheet')}Excel</button><button class="btn sm" data-exp="csv">CSV</button>${kind ? '' : `<button class="btn sm primary" data-new>${icon('plus')}Novo</button>`}</div>
+        <div class="row"><button class="btn sm" data-exp="pdf">${icon('pdf')}PDF</button><button class="btn sm" data-exp="xlsx">${icon('sheet')}Excel</button><button class="btn sm" data-exp="csv">CSV</button></div>
       </div>
       ${groupedList(shown, { accId: f.account || null, sel, kind, emptyText: kind ? `Nenhuma ${K.one} encontrada neste período.` : '' })}
       ${list.length > limit ? `<div class="center" style="margin-top:10px"><button class="btn" data-more>Mostrar mais (${list.length - limit} restantes)</button></div>` : ''}
@@ -176,6 +187,7 @@ const TxScreens = (() => {
       const ev = el.dataset.f === 'q' ? 'input' : 'change';
       el.addEventListener(ev, U.debounce(() => { f[el.dataset.f] = el.value; limit = 300; App.render(); const q = $('[data-f=q]'); if (el.dataset.f === 'q' && q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }, el.dataset.f === 'q' ? 300 : 0));
     });
+    const pc = $('[data-parc]', root); if (pc) pc.onchange = () => { f.parc = pc.checked; limit = 300; App.render(); };
     $$('[data-cat]', root).forEach((b) => (b.onclick = () => { f.category = f.category === b.dataset.cat ? '' : b.dataset.cat; limit = 300; App.render(); }));
     $$('[data-quick]', root).forEach((b) => (b.onclick = (e) => { e.preventDefault(); f.status = f.status === b.dataset.quick ? '' : b.dataset.quick; limit = 300; App.render(); }));
     bindList(root, f.account || null, sel);
@@ -229,13 +241,13 @@ const TxScreens = (() => {
     const tbl = R.sections.find((s) => s.kind === 'table');
     const accId = f.account || null;
     tbl.rows = list.map((t) => [t.date, t.description, F.TX_TYPES[t.type], t.type === 'transferencia' ? `${F.accName(t.account_id)} → ${F.accName(t.to_account_id)}` : F.catName(t.category_id), t.type === 'transferencia' ? '' : F.accName(t.account_id), t.type === 'transferencia' ? (accId ? F.effect(t, accId) : t.amount) : signed(t), t.status === 'pendente' ? 'Pendente' : 'Efetivada']);
-    const rec = sum(list.filter((t) => t.type === 'receita')), desp = sum(list.filter((t) => t.type === 'despesa'));
+    const rec = sum(list.filter((t) => t.type === 'receita' && cnt(t))), desp = sum(list.filter((t) => t.type === 'despesa' && cnt(t)));
     if (kind) {
       const tot = kind === 'receita' ? rec : desp, pend = sum(list.filter((t) => t.status === 'pendente'));
       R.title = K.title;
       R.sections[0].items = [{ label: K.title, text: String(list.length) }, { label: 'Total', value: tot, cls: K.cls }, { label: K.done, value: tot - pend }, { label: K.pend, value: pend }];
     } else R.sections[0].items = [{ label: 'Lançamentos', text: String(list.length) }, { label: 'Receitas', value: rec, cls: 'pos' }, { label: 'Despesas', value: desp, cls: 'neg' }, { label: 'Resultado', value: rec - desp, cls: rec - desp >= 0 ? 'pos' : 'neg' }];
-    R.subtitle = [f.mode === 'all' ? 'Todo o período' : `${U.fmtDate(from)} a ${U.fmtDate(to)}`, f.account ? 'Conta: ' + F.accName(f.account) : '', f.category ? 'Categoria: ' + (f.category === '__none' ? 'Sem categoria' : F.catName(f.category)) : '', f.q ? 'Busca: ' + f.q : ''].filter(Boolean).join(' • ');
+    R.subtitle = [f.mode === 'all' ? 'Todo o período' : `${U.fmtDate(from)} a ${U.fmtDate(to)}`, f.account ? 'Conta: ' + F.accName(f.account) : '', f.category ? 'Categoria: ' + (f.category === '__none' ? 'Sem categoria' : F.catName(f.category)) : '', f.q ? 'Busca: ' + f.q : '', f.parc ? 'Só parcelados' : ''].filter(Boolean).join(' • ');
     const name = (kind ? K.title.toLowerCase() : 'lancamentos') + '-' + U.fileStamp();
     const p = fmt === 'pdf' ? Reports.toPDF(R, name) : fmt === 'xlsx' ? Reports.toXLSX(R, name) : Reports.toCSV(R, name);
     Promise.resolve(p).then((r) => UI.toast(typeof r === 'string' ? 'Salvo em ' + r : 'Arquivo gerado', 'ok')).catch((e) => UI.toast(e.message, 'error'));
@@ -260,7 +272,8 @@ const TxScreens = (() => {
         <label class="field"><span>Valor (R$)</span><input class="input big" id="tv" inputmode="decimal" placeholder="0,00" value="${t.amount ? U.num(t.amount) : ''}" autocomplete="off"></label>
         <label class="field"><span>Data</span><input class="input" type="date" id="td" value="${t.date}" required></label>
         <label class="field full"><span>Descrição</span><input class="input" id="tds" list="tdl" value="${U.esc(t.description || '')}" placeholder="Ex.: Supermercado, Salário, Aluguel…" autocomplete="off"><datalist id="tdl">${descs.map((d) => `<option value="${U.esc(d)}">`).join('')}</datalist></label>
-        <label class="field"><span id="tal">${t.type === 'transferencia' ? 'Conta de origem' : 'Conta'}</span><select class="input" id="ta">${UI.accountOptions(t.account_id, { archived: !!(tx && Store.get('accounts', t.account_id) && Store.get('accounts', t.account_id).archived) })}</select></label>
+        <div class="field"><span id="tal">${t.type === 'transferencia' ? 'Conta de origem' : 'Conta'}</span><select class="input" id="ta">${UI.accountOptions(t.account_id, { archived: !!(tx && Store.get('accounts', t.account_id) && Store.get('accounts', t.account_id).archived) })}</select>
+          <label class="check small" id="tew" style="margin-top:6px" title="Use quando um valor for devolvido: compra cancelada, cobrança indevida, estorno no cartão"><input type="checkbox" id="te" ${t.estorno ? 'checked' : ''}> <span id="tel">Estorno (valor devolvido nesta conta)</span></label></div>
         <label class="field" id="tcw"><span>Categoria</span><select class="input" id="tc"></select></label>
         <label class="field" id="ttw"><span>Conta de destino</span><select class="input" id="tto">${UI.accountOptions(t.to_account_id || '', {})}</select></label>
         <div class="field"><span>Situação</span><label class="check" style="min-height:40px"><input type="checkbox" id="ts" ${t.status !== 'pendente' ? 'checked' : ''}> <span id="tsl"></span></label></div>
@@ -281,7 +294,8 @@ const TxScreens = (() => {
       const setType = (tp) => {
         t.type = tp;
         $$('#tt button', b).forEach((x) => x.classList.toggle('on', x.dataset.v === tp));
-        $('#tcw', b).hidden = tp === 'transferencia'; $('#ttw', b).hidden = tp !== 'transferencia';
+        $('#tcw', b).hidden = tp === 'transferencia'; $('#ttw', b).hidden = tp !== 'transferencia'; $('#tew', b).hidden = tp === 'transferencia';
+        $('#tel', b).textContent = tp === 'receita' ? 'Estorno de receita (valor recebido que foi devolvido)' : 'Estorno (valor devolvido para esta conta)';
         $('#tal', b).textContent = tp === 'transferencia' ? 'Conta de origem' : 'Conta';
         const cur = $('#tc', b).value || t.category_id;
         $('#tc', b).innerHTML = UI.categoryOptions(tp, cur);
@@ -289,9 +303,9 @@ const TxScreens = (() => {
         updStatus();
         if (tp === 'transferencia') { const o = $('#tto', b); if (!o.value || o.value === $('#ta', b).value) { const other = F.accounts().find((a) => a.id !== $('#ta', b).value); if (other) o.value = other.id; } }
       };
-      const updStatus = () => { $('#tsl', b).textContent = $('#ts', b).checked ? (t.type === 'receita' ? 'Recebido (efetivado)' : t.type === 'despesa' ? 'Pago (efetivado)' : 'Realizada (efetivada)') : 'Pendente (a pagar/receber)'; };
+      const updStatus = () => { $('#tsl', b).textContent = $('#ts', b).checked ? ($('#te', b).checked && t.type !== 'transferencia' ? 'Estornado (efetivado)' : t.type === 'receita' ? 'Recebido (efetivado)' : t.type === 'despesa' ? 'Pago (efetivado)' : 'Realizada (efetivada)') : 'Pendente (a pagar/receber)'; };
       $$('#tt button', b).forEach((x) => (x.onclick = () => setType(x.dataset.v)));
-      $('#ts', b).onchange = updStatus;
+      $('#ts', b).onchange = updStatus; $('#te', b).onchange = updStatus;
       $('#tc', b).onchange = () => (catTouched = true);
       $('#tds', b).addEventListener('input', U.debounce(() => {
         if (catTouched || t.type === 'transferencia') return;
@@ -318,6 +332,7 @@ const TxScreens = (() => {
       const rec = {
         ...t, type: t.type, amount: Math.abs(amount), date, description: desc, account_id: $('#ta', b).value,
         category_id: t.type === 'transferencia' ? null : ($('#tc', b).value || null), to_account_id: t.type === 'transferencia' ? $('#tto', b).value : null,
+        estorno: t.type !== 'transferencia' && $('#te', b).checked,
         status: $('#ts', b).checked ? 'efetivada' : 'pendente', notes: $('#tn', b).value.trim(), tags: $('#tg', b).value.split(',').map((x) => x.trim()).filter(Boolean),
       };
       // valor negativo digitado em receita/despesa: inverte o tipo

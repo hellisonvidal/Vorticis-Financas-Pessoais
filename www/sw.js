@@ -1,5 +1,5 @@
 /* Service worker: permite usar o app sem internet (versão web/PWA). */
-const CACHE = 'financas-v1.6.0';
+const CACHE = 'financas-v1.7.0';
 const FILES = [
   './', './index.html', './manifest.webmanifest', './config.js', './version.js', './css/app.css',
   './js/util.js', './js/store.js', './js/sync.js', './js/finance.js', './js/debts.js', './js/openfinance.js', './js/updater.js', './js/charts.js', './js/importers.js', './js/reports.js', './js/sample.js',

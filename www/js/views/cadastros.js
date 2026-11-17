@@ -2,12 +2,14 @@
 /* Categorias e regras, Orçamentos e Metas */
 Views.categorias = (() => {
   const { $, $$, icon } = UI;
+  const S = { q: '' };
   function render() {
     const counts = {}; F.txs().forEach((t) => { if (t.category_id) counts[t.category_id] = (counts[t.category_id] || 0) + 1; });
-    const list = (type) => F.categories().filter((c) => c.type === type).map((c) => `<li data-cat="${c.id}" style="cursor:pointer"><i class="dot" style="background:${U.esc(c.color)}"></i><span>${U.esc(c.name)}</span><small class="muted">${counts[c.id] || 0} lanç.</small>${icon('edit')}</li>`).join('') || '<li class="empty">Nenhuma</li>';
-    const rules = Store.all('rules').filter((r) => Store.get('categories', r.category_id)).sort((a, b) => a.pattern.localeCompare(b.pattern));
+    const list = (type) => F.categories().filter((c) => c.type === type && (!S.q || U.norm(c.name).includes(U.norm(S.q)))).map((c) => `<li data-cat="${c.id}" style="cursor:pointer"><i class="dot" style="background:${U.esc(c.color)}"></i><span>${U.esc(c.name)}</span><small class="muted">${counts[c.id] || 0} lanç.</small>${icon('edit')}</li>`).join('') || '<li class="empty">Nenhuma</li>';
+    const rules = Store.all('rules').filter((r) => Store.get('categories', r.category_id) && (!S.q || U.norm(r.pattern + ' ' + F.catName(r.category_id)).includes(U.norm(S.q)))).sort((a, b) => a.pattern.localeCompare(b.pattern));
     return `
     <div class="row between" style="margin-bottom:12px"><p class="muted small" style="margin:0">Organize receitas e despesas. As regras categorizam automaticamente lançamentos novos e importados.</p><button class="btn primary" data-new>${icon('plus')}Nova categoria</button></div>
+    <div class="filters"><input class="input search" id="catq" placeholder="Buscar categoria ou regra…" value="${U.esc(S.q)}"></div>
     <div class="grid g3">
       <div class="card"><h3 class="neg">Despesas</h3><ul class="mini">${list('despesa')}</ul></div>
       <div class="card"><h3 class="pos">Receitas</h3><ul class="mini">${list('receita')}</ul><h3 style="margin-top:16px">Ambos</h3><ul class="mini">${list('ambos')}</ul></div>
@@ -20,6 +22,7 @@ Views.categorias = (() => {
   function bind(root) {
     $('[data-new]', root).onclick = () => form();
     $('[data-newrule]', root).onclick = () => ruleForm();
+    bindSearch($('#catq', root), (v) => (S.q = v));
     $$('[data-cat]', root).forEach((li) => (li.onclick = () => form(Store.get('categories', li.dataset.cat))));
     $$('[data-rule]', root).forEach((li) => (li.onclick = () => ruleForm(Store.get('rules', li.dataset.rule))));
   }
@@ -92,10 +95,10 @@ Views.categorias = (() => {
 
 Views.orcamentos = (() => {
   const { $, $$, icon } = UI;
-  let month = null;
+  let month = null; const S = { q: '' };
   function render() {
     if (!month) month = App.state.month;
-    const b = F.budgetStatus(month);
+    const b = F.budgetStatus(month).filter((x) => (!S.q || U.norm(x.name).includes(U.norm(S.q))));
     const to = b.reduce((s, x) => s + x.amount, 0), tr = b.reduce((s, x) => s + x.spent, 0);
     const s = F.summary(U.monthStart(month), U.monthEnd(month));
     const semOrc = s.cats.filter((c) => c.type === 'despesa' && !b.some((x) => x.category_id === c.id));
@@ -110,6 +113,7 @@ Views.orcamentos = (() => {
       <div class="kpi"><span>Disponível</span><b class="money ${UI.moneyClass(to - tr)}">${U.money(to - tr)}</b></div>
       <div class="kpi"><span>Gastos sem orçamento</span><b class="money">${U.money(semOrc.reduce((a, c) => a + c.total, 0))}</b></div>
     </div>
+    <div class="filters"><input class="input search" id="budq" placeholder="Buscar categoria do orçamento…" value="${U.esc(S.q)}"></div>
     <div class="card">
       ${b.length ? b.map((x) => { const p = x.amount ? x.spent / x.amount : 0; const warn = dayFrac && p > dayFrac + 0.1 && p <= 1; return `<div data-b="${x.id}" style="padding:10px 4px;cursor:pointer;border-bottom:1px solid var(--line)">
         <div class="row between"><span><i class="dot" style="background:${x.color}"></i> <b>${U.esc(x.name)}</b> ${x.month ? '<span class="badge">só este mês</span>' : ''}</span><span class="money"><b class="${p > 1 ? 'neg' : ''}">${U.money(x.spent)}</b> <span class="muted">de ${U.money(x.amount)}</span></span></div>
@@ -120,6 +124,7 @@ Views.orcamentos = (() => {
   }
   function bind(root) {
     bindMonthNav(root, () => month, (v) => (month = v));
+    bindSearch($('#budq', root), (v) => (S.q = v));
     $('[data-new]', root).onclick = () => form();
     $$('[data-b]', root).forEach((d) => (d.onclick = () => form(Store.get('budgets', d.dataset.b))));
     $$('[data-add]', root).forEach((d) => (d.onclick = () => form(null, d.dataset.add)));
@@ -160,9 +165,11 @@ Views.orcamentos = (() => {
 Views.metas = (() => {
   const { $, $$, icon } = UI;
   const current = (g) => (g.account_id && Store.get('accounts', g.account_id) ? F.balance(g.account_id) : g.saved || 0);
+  const S = { q: '' };
   function render() {
-    const goals = Store.all('goals').sort((a, b) => (a.deadline || '9').localeCompare(b.deadline || '9'));
+    const goals = Store.all('goals').filter((g) => (!S.q || U.norm(g.name + ' ' + (g.account_id ? F.accName(g.account_id) : '')).includes(U.norm(S.q)))).sort((a, b) => (a.deadline || '9').localeCompare(b.deadline || '9'));
     return `<div class="row between" style="margin-bottom:12px"><p class="small muted" style="margin:0">Defina objetivos e acompanhe quanto falta. Uma meta pode usar o saldo de uma conta (ex.: poupança) automaticamente.</p><button class="btn primary" data-new>${icon('plus')}Nova meta</button></div>
+    <div class="filters"><input class="input search" id="goalq" placeholder="Buscar meta…" value="${U.esc(S.q)}"></div>
     ${goals.length ? `<div class="acc-grid">${goals.map((g) => {
       const cur = current(g); const p = g.target ? cur / g.target : 0;
       let ritmo = '';
@@ -180,6 +187,7 @@ Views.metas = (() => {
   }
   function bind(root) {
     $('[data-new]', root).onclick = () => form();
+    bindSearch($('#goalq', root), (v) => (S.q = v));
     $$('[data-g]', root).forEach((c) => (c.onclick = (e) => { if (!e.target.closest('button')) form(Store.get('goals', c.dataset.g)); }));
     $$('[data-add],[data-sub]', root).forEach((btn) => (btn.onclick = async () => {
       const g = Store.get('goals', btn.dataset.add || btn.dataset.sub); const sub = !!btn.dataset.sub;

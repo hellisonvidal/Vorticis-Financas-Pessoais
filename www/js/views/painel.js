@@ -23,9 +23,9 @@ Views.painel = {
     }
     const tot = F.totals({ until: U.monthEnd(ym) });
     const s = F.summary(U.monthStart(ym), U.monthEnd(ym));
-    const pend = F.txs().filter((t) => t.status === 'pendente' && U.monthOf(t.date) === ym && t.type !== 'transferencia');
-    const pendRec = pend.filter((t) => t.type === 'receita').reduce((a, t) => a + t.amount, 0);
-    const pendDesp = pend.filter((t) => t.type === 'despesa').reduce((a, t) => a + t.amount, 0);
+    const pend = F.txs().filter((t) => t.status === 'pendente' && U.monthOf(t.date) === ym && F.counted(t));
+    const pendRec = pend.filter((t) => t.type === 'receita').reduce((a, t) => a + F.val(t), 0);
+    const pendDesp = pend.filter((t) => t.type === 'despesa').reduce((a, t) => a + F.val(t), 0);
     const ms = F.monthly(U.addMonthYM(ym, -5), ym);
     const nw = F.netWorthSeries(U.addMonthYM(ym, -11), ym);
     const up = F.upcoming(15).slice(0, 8);
@@ -45,12 +45,12 @@ Views.painel = {
     const despDia = diasPassados ? Math.round(s.despesas / diasPassados) : 0;
     const projecao = diasPassados && diasPassados < diasMes ? Math.round(s.despesas / diasPassados * diasMes) : s.despesas;
     // ---- fluxo de caixa diário do mês (acumulado) ----
-    const doMes = F.txs().filter((t) => t.type !== 'transferencia' && t.date >= ini && t.date <= fim && t.category_id !== F.ADJ_CAT);
-    const porDia = {}; doMes.forEach((t) => { porDia[t.date] = (porDia[t.date] || 0) + (t.type === 'receita' ? t.amount : -t.amount); });
+    const doMes = F.txs().filter((t) => t.date >= ini && t.date <= fim && F.counted(t));
+    const porDia = {}; doMes.forEach((t) => { porDia[t.date] = (porDia[t.date] || 0) + (t.type === 'receita' ? 1 : -1) * F.val(t); });
     let acc = 0; const fluxo = [];
     for (let d = 1; d <= diasMes; d++) { const k = ym + '-' + U.pad(d); acc += porDia[k] || 0; fluxo.push({ label: String(d), value: acc }); }
     // ---- maiores despesas e variação por categoria ----
-    const maiores = doMes.filter((t) => t.type === 'despesa').sort((a, b) => b.amount - a.amount).slice(0, 6);
+    const maiores = doMes.filter((t) => t.type === 'despesa' && !t.estorno).sort((a, b) => b.amount - a.amount).slice(0, 6);
     const prev = U.addMonthYM(ym, -1); const sp = F.summary(U.monthStart(prev), U.monthEnd(prev));
     const prevMap = {}; sp.cats.filter((c) => c.type === 'despesa').forEach((c) => (prevMap[c.id] = c.total));
     const variacao = despCats.map((c) => ({ ...c, antes: prevMap[c.id] || 0, dif: c.total - (prevMap[c.id] || 0) }))

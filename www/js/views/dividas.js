@@ -2,7 +2,8 @@
 /* Endividamento: visão geral, dívidas, plano de quitação e consultas oficiais (Registrato, Serasa, SPC, Boa Vista, protestos) */
 Views.dividas = (() => {
   const { $, $$, icon } = UI;
-  const P = { strategy: 'avalanche', extra: 0, includeCards: true, showPaid: false };
+  const P = { strategy: 'avalanche', extra: 0, includeCards: true, showPaid: false, q: '' };
+  const dMatch = (txt) => !P.q || U.norm(txt).includes(U.norm(P.q));
   const LEVEL = {
     saudavel: ['pos', 'Saudável', 'As parcelas tomam até 30% da sua renda, faixa usada como referência por bancos e educadores financeiros.'],
     atencao: ['warn', 'Atenção', 'Entre 30% e 50% da renda vai para parcelas. Evite novas dívidas e priorize quitar as de juros mais altos.'],
@@ -19,7 +20,7 @@ Views.dividas = (() => {
     const sims = ['minimo', P.strategy].map((s) => Debts.simulate(o.all, { strategy: s, extra: P.extra }));
     const [base, plan] = sims;
     const donutItems = Object.entries(o.byKind).map(([k, v], i) => ({ name: Debts.KINDS[k] || k, total: v, color: ['#e11d48', '#f97316', '#eab308', '#8b5cf6', '#2563eb', '#0891b2', '#16a34a', '#db2777', '#64748b', '#a16207', '#4f46e5', '#0f766e'][i % 12] })).sort((a, b) => b.total - a.total);
-    const shown = Debts.list(true).filter((d) => P.showPaid || d.status !== 'quitada');
+    const shown = Debts.list(true).filter((d) => (P.showPaid || d.status !== 'quitada') && dMatch([d.name, d.creditor, Debts.KINDS[d.kind], d.notes].join(' ')));
 
     return `
     <div class="row between" style="margin-bottom:16px">
@@ -48,13 +49,13 @@ Views.dividas = (() => {
 
     <div class="card" style="margin-top:18px">
       <div class="row between"><h3>Suas dívidas</h3>
-        <div class="row small"><label class="check"><input type="checkbox" id="dcards" ${P.includeCards ? 'checked' : ''}> Incluir cartões de crédito</label><label class="check"><input type="checkbox" id="dpaid" ${P.showPaid ? 'checked' : ''}> Mostrar quitadas</label></div></div>
+        <div class="row small"><input class="input search" id="dq" placeholder="Buscar dívida, credor, tipo…" value="${U.esc(P.q)}" style="min-width:220px"><label class="check"><input type="checkbox" id="dcards" ${P.includeCards ? 'checked' : ''}> Incluir cartões de crédito</label><label class="check"><input type="checkbox" id="dpaid" ${P.showPaid ? 'checked' : ''}> Mostrar quitadas</label></div></div>
       ${shown.length || o.cards.length ? `<div class="tablewrap"><table class="tbl"><thead><tr><th>Dívida</th><th>Tipo</th><th>Situação</th><th class="right">Saldo devedor</th><th class="right">Parcela</th><th class="right">Juros</th><th class="right">Restam</th><th></th></tr></thead><tbody>
         ${shown.map((d) => `<tr data-d="${d.id}" style="cursor:pointer"><td><b>${U.esc(d.name)}</b><br><small class="muted">${U.esc(d.creditor || '')}${d.source && d.source !== 'manual' ? ' • ' + U.esc(Debts.SOURCES[d.source] || d.source) : ''}</small></td>
           <td class="small">${U.esc(Debts.KINDS[d.kind] || '')}</td><td>${statusBadge(d)}</td><td class="right money"><b>${U.money(d.balance)}</b>${d.overdue ? `<br><small class="neg">${U.money(d.overdue)} vencido</small>` : ''}</td>
           <td class="right money">${d.installment ? U.money(d.installment) : '—'}</td><td class="right small">${rateTxt(d.rate)}</td><td class="right small">${d.remaining ? d.remaining + 'x' : '—'}</td>
           <td class="right nowrap">${d.status !== 'quitada' ? `<button class="btn sm" data-pay="${d.id}">${icon('check')}Pagar</button>` : ''}</td></tr>`).join('')}
-        ${P.includeCards ? o.cards.map((c) => `<tr data-acc="${c.account_id}" style="cursor:pointer"><td><b>${U.esc(c.name)}</b><br><small class="muted">fatura do cartão (vem de Contas e cartões)</small></td><td class="small">Cartão de crédito</td><td><span class="badge info">Automático</span></td><td class="right money"><b>${U.money(c.balance)}</b></td><td class="right">—</td><td class="right">—</td><td class="right">—</td><td></td></tr>`).join('') : ''}
+        ${P.includeCards ? o.cards.filter((c) => dMatch(c.name + ' cartão')).map((c) => `<tr data-acc="${c.account_id}" style="cursor:pointer"><td><b>${U.esc(c.name)}</b><br><small class="muted">fatura do cartão (vem de Cartões de crédito)</small></td><td class="small">Cartão de crédito</td><td><span class="badge info">Automático</span></td><td class="right money"><b>${U.money(c.balance)}</b></td><td class="right">—</td><td class="right">—</td><td class="right">—</td><td></td></tr>`).join('') : ''}
       </tbody></table></div>` : `<div class="empty">Nenhuma dívida cadastrada. Use <b>Nova dívida</b> ou importe o relatório do <b>Registrato</b> do Banco Central, que lista os empréstimos e financiamentos em seu CPF.</div>`}
     </div>
 
@@ -100,6 +101,7 @@ Views.dividas = (() => {
     $$('[data-d]', root).forEach((tr) => (tr.onclick = (e) => { if (e.target.closest('[data-pay]')) return; detail(Store.get('debts', tr.dataset.d)); }));
     $$('[data-acc]', root).forEach((tr) => (tr.onclick = () => App.go('conta', tr.dataset.acc)));
     $$('[data-pay]', root).forEach((b) => (b.onclick = () => payForm(Store.get('debts', b.dataset.pay))));
+    bindSearch($('#dq', root), (v) => (P.q = v));
     const dc = $('#dcards', root); if (dc) dc.onchange = (e) => { P.includeCards = e.target.checked; App.render(); };
     const dp = $('#dpaid', root); if (dp) dp.onchange = (e) => { P.showPaid = e.target.checked; App.render(); };
     $$('#dstrat button', root).forEach((b) => (b.onclick = () => { P.strategy = b.dataset.v; App.render(); }));
@@ -260,5 +262,57 @@ Views.dividas = (() => {
     $('#sread', b).onclick = () => show($('#stext', b).value.split(/\r?\n/));
   }
 
-  return { title: 'Endividamento', render, bind, form, importSCR };
+  return { title: 'Endividamento', render, bind, form, importSCR, detail, payForm, statusBadge, rateTxt };
+})();
+
+/* Empréstimos e financiamentos: contratos com parcelas (pessoal, consignado, veículo, imóvel, estudantil, acordos) */
+Views.emprestimos = (() => {
+  const { $, $$, icon } = UI;
+  const LOAN_KINDS = ['credito_pessoal', 'consignado', 'financiamento_veiculo', 'financiamento_imovel', 'estudantil', 'acordo', 'cartao_parcelado'];
+  const S = { q: '', kind: '', showPaid: false };
+  const isLoan = (d) => LOAN_KINDS.includes(d.kind);
+  function render() {
+    const all = Debts.list(true).filter(isLoan);
+    const ativos = all.filter((d) => d.status !== 'quitada');
+    const shown = all.filter((d) => (S.showPaid || d.status !== 'quitada') && (!S.kind || d.kind === S.kind)
+      && (!S.q || U.norm([d.name, d.creditor, Debts.KINDS[d.kind], d.notes].join(' ')).includes(U.norm(S.q))));
+    const saldo = ativos.reduce((s, d) => s + (d.balance || 0), 0), parcelas = ativos.reduce((s, d) => s + (d.installment || 0), 0);
+    const wr = saldo ? ativos.reduce((s, d) => s + (d.rate || 0) * (d.balance || 0), 0) / saldo : 0;
+    const maxRest = ativos.reduce((m, d) => Math.max(m, d.remaining || 0), 0);
+    const quando = (n) => (n ? U.fmtMonth(U.addMonthYM(U.monthOf(U.today()), n)) : '—');
+    const R = Views.dividas.rateTxt;
+    return `
+    <div class="kpis">
+      <div class="kpi has-ic t-neg"><div class="kic">${icon('dividas')}</div><span>Saldo devedor</span><b class="money">${U.money(saldo)}</b><small>${ativos.length} contrato(s) ativo(s)</small></div>
+      <div class="kpi has-ic"><div class="kic">${icon('calendar')}</div><span>Parcelas por mês</span><b class="money">${U.money(parcelas)}</b><small>soma das parcelas</small></div>
+      <div class="kpi has-ic t-warn"><div class="kic">${icon('juros')}</div><span>Juros médios</span><b>${wr ? R(Math.round(wr * 100) / 100) : '—'}</b><small>ponderado pelo saldo</small></div>
+      <div class="kpi has-ic t-pos"><div class="kic">${icon('check')}</div><span>Último pagamento</span><b>${quando(maxRest)}</b><small>${maxRest ? 'pelas parcelas restantes' : 'informe as parcelas restantes'}</small></div>
+    </div>
+    <div class="filters">
+      <input class="input search" id="lnq" placeholder="Buscar contrato, banco, tipo…" value="${U.esc(S.q)}">
+      <select class="input" id="lnk">${UI.opt('', 'Todos os tipos', S.kind)}${LOAN_KINDS.map((k) => UI.opt(k, Debts.KINDS[k], S.kind)).join('')}</select>
+      <label class="check small chipcheck"><input type="checkbox" id="lnpaid" ${S.showPaid ? 'checked' : ''}> Mostrar quitados</label>
+      <span class="spacer"></span>
+      <button class="btn" data-a="scr">${icon('importar')}Importar Registrato</button><button class="btn primary" data-a="new">${icon('plus')}Novo empréstimo / financiamento</button>
+    </div>
+    ${shown.length ? `<div class="acc-grid">${shown.map((d) => `<div class="card acc" data-d="${d.id}" style="--c:${U.esc(d.color || '#be123c')}">
+        <div class="row between"><div><h4>${U.esc(d.name)}</h4><span class="small muted">${U.esc(Debts.KINDS[d.kind] || '')}${d.creditor ? ' • ' + U.esc(d.creditor) : ''}</span></div>${Views.dividas.statusBadge(d)}</div>
+        <div class="bal money">${U.money(d.balance || 0)}</div>
+        <div class="small muted">saldo devedor${d.balance_date ? ' em ' + U.fmtDate(d.balance_date) : ''}</div>
+        <div class="row between small" style="margin-top:10px"><span>Parcela <b class="money">${d.installment ? U.money(d.installment) : '—'}</b></span><span>Restam <b>${d.remaining ? d.remaining + 'x' : '—'}</b></span><span>Juros <b>${R(d.rate)}</b></span></div>
+        <div class="row between small muted" style="margin-top:6px"><span>${d.remaining ? 'Termina em ' + quando(d.remaining) : ''}</span>${d.status !== 'quitada' ? `<button class="btn sm" data-pay="${d.id}">${icon('check')}Pagar parcela</button>` : ''}</div>
+      </div>`).join('')}</div>`
+      : `<div class="card empty">${S.q || S.kind ? 'Nenhum contrato encontrado com esses filtros.' : 'Nenhum empréstimo ou financiamento cadastrado. Use <b>Novo empréstimo / financiamento</b>, importe o <b>Registrato</b> ou traga do banco pelo <a href="#/bancos">Open Finance</a> (botão Empréstimos).'}</div>`}
+    <p class="small muted" style="margin-top:14px">Os contratos também aparecem em <a href="#/dividas">Endividamento</a>, com o plano de quitação e o comprometimento da renda.</p>`;
+  }
+  function bind(root) {
+    bindSearch($('#lnq', root), (v) => (S.q = v));
+    $('#lnk', root).onchange = (e) => { S.kind = e.target.value; App.render(); };
+    $('#lnpaid', root).onchange = (e) => { S.showPaid = e.target.checked; App.render(); };
+    $$('[data-a="new"]', root).forEach((b) => (b.onclick = () => Views.dividas.form(null, { kind: S.kind || 'credito_pessoal' })));
+    $$('[data-a="scr"]', root).forEach((b) => (b.onclick = () => Views.dividas.importSCR()));
+    $$('[data-d]', root).forEach((c) => (c.onclick = (e) => { if (e.target.closest('[data-pay]')) return; Views.dividas.detail(Store.get('debts', c.dataset.d)); }));
+    $$('[data-pay]', root).forEach((b) => (b.onclick = () => Views.dividas.payForm(Store.get('debts', b.dataset.pay))));
+  }
+  return { title: 'Empréstimos e financiamentos', render, bind };
 })();

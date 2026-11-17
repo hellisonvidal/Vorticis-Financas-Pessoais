@@ -9,6 +9,8 @@ const UI = (() => {
     painel: '<path d="M3 13h8V3H3zM13 21h8V11h-8zM3 21h8v-6H3zM13 3v6h8V3z"/>',
     receitas: '<circle cx="12" cy="12" r="9"/><path d="M12 16V8M8.5 11.5 12 8l3.5 3.5"/>',
     despesas: '<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8.5 12.5 12 16l3.5-3.5"/>',
+    cartoes: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/>',
+    emprestimos: '<path d="M3 21h18M5 21V11M19 21V11M9 21v-6h6v6M2 11l10-7 10 7"/>',
     lancamentos: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
     contas: '<path d="M3 10h18M5 6l7-3 7 3M4 10v8M20 10v8M8 14v4M12 14v4M16 14v4M2 21h20"/>',
     categorias: '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>',

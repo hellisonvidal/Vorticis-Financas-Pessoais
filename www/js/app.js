@@ -5,8 +5,9 @@ const Views = {};
 const App = (() => {
   const { $, $$, icon } = UI;
   const NAV = [
-    ['§', 'Visão geral'], ['painel', 'Painel'], ['receitas', 'Receitas'], ['despesas', 'Despesas'], ['contas', 'Contas e cartões'],
-    ['§', 'Planejamento'], ['orcamentos', 'Orçamentos'], ['metas', 'Metas'], ['dividas', 'Endividamento'],
+    ['§', 'Visão geral'], ['painel', 'Painel'], ['receitas', 'Receitas'], ['despesas', 'Despesas'],
+    ['§', 'Contas e crédito'], ['contas', 'Contas'], ['cartoes', 'Cartões de crédito'], ['emprestimos', 'Empréstimos e financiamentos'], ['dividas', 'Endividamento'],
+    ['§', 'Planejamento'], ['orcamentos', 'Orçamentos'], ['metas', 'Metas'],
     ['§', 'Ferramentas'], ['importar', 'Importar extrato'], ['bancos', 'Open Finance'], ['relatorios', 'Relatórios'], ['categorias', 'Categorias e regras'], ['config', 'Configurações'],
   ];
   const state = { month: U.monthOf(U.today()), route: 'painel', param: null };
@@ -39,7 +40,7 @@ const App = (() => {
       console.error(e);
       view.innerHTML = `<div class="card"><h3>Ocorreu um erro ao abrir esta tela</h3><p class="neg">${U.esc(e.message)}</p><button class="btn" onclick="location.hash='#/painel'">Voltar ao painel</button></div>`;
     }
-    const navKey = route === 'conta' ? 'contas' : route;
+    const navKey = route === 'conta' ? ((Store.get('accounts', param) || {}).type === 'cartao' ? 'cartoes' : 'contas') : route;
     $$('#nav a, #bottom a').forEach((a) => a.classList.toggle('on', a.dataset.r === navKey));
     document.body.classList.remove('menu');
     if (changed) window.scrollTo(0, 0); else window.scrollTo(0, y);
@@ -49,13 +50,7 @@ const App = (() => {
 
   function buildNav() {
     $('#nav').innerHTML = NAV.map(([r, n]) => (r === '§' ? `<div class="navsec">${n}</div>` : `<a href="#/${r}" data-r="${r}">${icon(r)}<span>${n}</span></a>`)).join('');
-    $('#bottom').innerHTML = [['painel', 'Painel'], ['receitas', 'Receitas']].map(([r, n]) => `<a href="#/${r}" data-r="${r}">${icon(r)}<span>${n}</span></a>`).join('')
-      + `<a href="#" class="fab" id="fab" aria-label="Novo lançamento"><span class="f">${icon('plus')}</span></a>`
-      + [['despesas', 'Despesas'], ['contas', 'Contas']].map(([r, n]) => `<a href="#/${r}" data-r="${r}">${icon(r)}<span>${n}</span></a>`).join('');
-    // "+" já abre como receita ou despesa conforme a tela em que você está
-    const quick = () => Views.lancamentos.form(null, state.route === 'receitas' ? { type: 'receita' } : state.route === 'despesas' ? { type: 'despesa' } : {});
-    $('#fab').onclick = (e) => { e.preventDefault(); quick(); };
-    $('#quickadd').onclick = quick;
+    $('#bottom').innerHTML = [['painel', 'Painel'], ['receitas', 'Receitas'], ['despesas', 'Despesas'], ['contas', 'Contas'], ['cartoes', 'Cartões']].map(([r, n]) => `<a href="#/${r}" data-r="${r}">${icon(r)}<span>${n}</span></a>`).join('');
     $('#menubtn').onclick = () => document.body.classList.toggle('menu');
     $('#scrim').onclick = () => document.body.classList.remove('menu');
     ['#syncbadge', '#syncbadge2'].forEach((s) => ($(s).onclick = () => go('config')));

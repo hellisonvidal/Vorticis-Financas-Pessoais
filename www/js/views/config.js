@@ -35,6 +35,11 @@ Views.config = (() => {
       ${Store.getMeta('last_backup') ? `<p class="small muted">Último backup: ${new Date(Store.getMeta('last_backup')).toLocaleString('pt-BR')}</p>` : '<p class="small warn">Nenhum backup feito ainda neste aparelho.</p>'}
     </div>
     <div class="card">
+      <h3>${icon('card')} Cálculo de receitas</h3>
+      <label class="check"><input type="checkbox" id="ccinc" ${F.cardCreditIsIncome() ? 'checked' : ''}> Contar créditos no cartão de crédito como receita</label>
+      <p class="small muted">Desligado (recomendado): valores que entram no cartão — pagamento de fatura, devoluções, valores que saíram do cartão para a conta — <b>não</b> entram como receita no Painel, em Receitas, nos relatórios e nos orçamentos. O saldo e a fatura do cartão continuam corretos. Para devoluções de compras, prefira marcar <b>Estorno</b> no lançamento: ele abate da despesa.</p>
+    </div>
+    <div class="card">
       <h3>Segurança e aparência</h3>
       <div class="row"><span>PIN de acesso: <b>${hasPin ? 'ativado' : 'desativado'}</b></span><span class="spacer"></span><button class="btn sm" id="pin">${hasPin ? 'Alterar/remover PIN' : 'Definir PIN'}</button></div>
       <p class="small muted">O PIN bloqueia a abertura do app neste aparelho (e após 5 minutos em segundo plano).</p>
@@ -121,6 +126,7 @@ Views.config = (() => {
           await Store.setMeta('pin_hash', await U.sha256('fp:' + p1)); UI.toast('PIN definido', 'ok'); App.render();
         } }] });
     });
+    const cc = $('#ccinc', root); if (cc) cc.onchange = async () => { await Store.setMeta('card_credit_income', cc.checked); UI.toast(cc.checked ? 'Créditos no cartão passam a contar como receita' : 'Créditos no cartão não contam mais como receita', 'ok'); App.render(); };
     $$('#theme button', root).forEach((b) => (b.onclick = async () => { await Store.setMeta('theme', b.dataset.v); App.applyTheme(); App.render(); }));
     const ow = $('#owner', root); ow.onchange = () => Store.setMeta('owner_name', ow.value.trim());
     on('install', async () => { const e = App.installEvt; if (!e) return; e.prompt(); await e.userChoice; App.installEvt = null; App.render(); });
