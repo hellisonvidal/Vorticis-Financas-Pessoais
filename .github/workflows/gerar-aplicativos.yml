@@ -108,7 +108,8 @@ jobs:
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          # o repositório Maven às vezes limita downloads (HTTP 429): tenta de novo após uma pausa
+          ./gradlew assembleDebug --no-daemon --stacktrace || { echo "Falhou; nova tentativa em 60 s"; sleep 60; ./gradlew assembleDebug --no-daemon --stacktrace; }
 
       - name: Renomear APK
         run: cp android/app/build/outputs/apk/debug/app-debug.apk VorticisFinancasPessoais.apk
