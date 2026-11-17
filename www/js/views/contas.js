@@ -1,26 +1,33 @@
 'use strict';
-/* Contas e cartões: lista, cadastro, detalhe com extrato, ajuste de saldo e faturas */
+/* Contas (corrente, poupança, carteira, investimentos): lista, cadastro, detalhe com extrato e ajuste de saldo.
+ * Cartões de crédito têm a tela própria (Views.cartoes), logo abaixo. */
+const accMatch = (a, q) => !q || U.norm([a.name, a.bank, F.ACCOUNT_TYPES[a.type]].join(' ')).includes(U.norm(q));
 Views.contas = (() => {
   const { $, $$, icon } = UI;
-  let showArchived = false;
+  let showArchived = false; let q = '';
 
   function render() {
-    const accs = F.accounts(showArchived);
-    const tot = F.totals();
+    const todas = F.accounts(showArchived).filter((a) => a.type !== 'cartao');
+    const accs = todas.filter((a) => accMatch(a, q));
+    const soma = (fn) => todas.filter((a) => a.include_total !== false).reduce((s, a) => s + fn(a), 0);
+    const atual = soma((a) => F.balance(a.id)), prev = soma((a) => F.balance(a.id, { mode: 'previsto', until: U.monthEnd(U.monthOf(U.today())) }));
+    const invest = soma((a) => (a.type === 'investimento' ? F.balance(a.id) : 0));
     const groups = {};
     accs.forEach((a) => (groups[a.type] = groups[a.type] || []).push(a));
     return `
     <div class="kpis">
-      <div class="kpi"><span>Saldo total (efetivado)</span><b class="money ${UI.moneyClass(tot.atual)}">${U.money(tot.atual)}</b></div>
-      <div class="kpi"><span>Previsto no fim do mês</span><b class="money ${UI.moneyClass(tot.previsto)}">${U.money(tot.previsto)}</b></div>
-      <div class="kpi"><span>Cartões de crédito</span><b class="money ${UI.moneyClass(tot.cartoes)}">${U.money(tot.cartoes)}</b></div>
-      <div class="kpi"><span>Investimentos</span><b class="money">${U.money(tot.invest)}</b></div>
+      <div class="kpi"><span>Saldo nas contas (efetivado)</span><b class="money ${UI.moneyClass(atual)}">${U.money(atual)}</b><small>sem cartões de crédito</small></div>
+      <div class="kpi"><span>Previsto no fim do mês</span><b class="money ${UI.moneyClass(prev)}">${U.money(prev)}</b><small>com pendentes</small></div>
+      <div class="kpi"><span>Investimentos</span><b class="money">${U.money(invest)}</b></div>
+      <a class="kpi" href="#/cartoes" style="color:inherit;text-decoration:none"><span>Cartões de crédito</span><b>${F.accounts().filter((a) => a.type === 'cartao').length}</b><small>ver cartões</small></a>
     </div>
-    <div class="row between" style="margin-bottom:12px">
-      <label class="check small"><input type="checkbox" id="sharch" ${showArchived ? 'checked' : ''}> Mostrar arquivadas</label>
-      <div class="row"><button class="btn" data-transfer>${icon('transfer')}Transferir</button><button class="btn primary" data-new>${icon('plus')}Nova conta</button></div>
+    <div class="filters">
+      <input class="input search" id="accq" placeholder="Buscar conta, banco ou tipo…" value="${U.esc(q)}">
+      <label class="check small chipcheck"><input type="checkbox" id="sharch" ${showArchived ? 'checked' : ''}> Mostrar arquivadas</label>
+      <span class="spacer"></span>
+      <button class="btn" data-transfer>${icon('transfer')}Transferir</button><button class="btn primary" data-new>${icon('plus')}Nova conta</button>
     </div>
-    ${accs.length ? Object.keys(F.ACCOUNT_TYPES).filter((k) => groups[k]).map((k) => `<h3 class="muted" style="margin:18px 0 10px">${F.ACCOUNT_TYPES[k]}</h3><div class="acc-grid">${groups[k].map(card).join('')}</div>`).join('') : '<div class="card empty">Nenhuma conta cadastrada.</div>'}`;
+    ${accs.length ? Object.keys(F.ACCOUNT_TYPES).filter((k) => groups[k]).map((k) => `<h3 class="muted" style="margin:18px 0 10px">${F.ACCOUNT_TYPES[k]}</h3><div class="acc-grid">${groups[k].map(card).join('')}</div>`).join('') : `<div class="card empty">${q ? 'Nenhuma conta encontrada para "' + U.esc(q) + '".' : 'Nenhuma conta cadastrada.'}</div>`}`;
   }
   function card(a) {
     const b = F.balance(a.id); const p = F.balance(a.id, { mode: 'previsto', until: U.monthEnd(U.monthOf(U.today())) });
@@ -38,17 +45,18 @@ Views.contas = (() => {
   }
   function bind(root) {
     $('#sharch', root).onchange = (e) => { showArchived = e.target.checked; App.render(); };
+    bindSearch($('#accq', root), (v) => (q = v));
     $('[data-new]', root).onclick = () => form();
     $('[data-transfer]', root).onclick = () => Views.lancamentos.form(null, { type: 'transferencia' });
     $$('[data-acc]', root).forEach((c) => (c.onclick = () => App.go('conta', c.dataset.acc)));
   }
 
-  function form(acc = null) {
-    const a = acc ? { ...acc } : { type: 'corrente', initial_balance: 0, color: UI.COLORS[F.accounts(true).length % UI.COLORS.length], include_total: true };
+  function form(acc = null, preset = {}) {
+    const a = acc ? { ...acc } : { ...preset, type: preset.type || 'corrente', initial_balance: 0, color: UI.COLORS[F.accounts(true).length % UI.COLORS.length], include_total: true };
     const isNew = !acc;
     const hasTx = !isNew && F.txs().some((t) => t.account_id === a.id || t.to_account_id === a.id);
     UI.modal({
-      title: isNew ? 'Nova conta' : 'Editar conta',
+      title: isNew ? (a.type === 'cartao' ? 'Novo cartão de crédito' : 'Nova conta') : (a.type === 'cartao' ? 'Editar cartão' : 'Editar conta'),
       body: `<div class="form">
         <label class="field full"><span>Nome</span><input class="input" id="an" value="${U.esc(a.name || '')}" placeholder="Ex.: Nubank, Itaú, Carteira"></label>
         <label class="field"><span>Tipo</span><select class="input" id="at">${Object.entries(F.ACCOUNT_TYPES).map(([k, v]) => UI.opt(k, v, a.type)).join('')}</select></label>
@@ -104,13 +112,13 @@ Views.contas = (() => {
       const n = F.txs().filter((t) => t.account_id === a.id || t.to_account_id === a.id).length;
       const v = await UI.choose(`Esta conta possui ${n} lançamento(s). Você pode arquivá-la (some das listas, mas o histórico é mantido) ou excluir a conta junto com todos os lançamentos.`, [{ v: 'arch', label: 'Arquivar', cls: 'primary' }, { v: 'del', label: 'Excluir tudo', cls: 'danger' }], 'Excluir conta');
       if (!v) return false;
-      if (v === 'arch') { await Store.upsert('accounts', { ...a, archived: true }); UI.toast('Conta arquivada', 'ok'); App.go('contas'); return true; }
+      if (v === 'arch') { await Store.upsert('accounts', { ...a, archived: true }); UI.toast('Conta arquivada', 'ok'); App.go(a.type === 'cartao' ? 'cartoes' : 'contas'); return true; }
       if (!(await UI.confirm(`Confirma excluir "${U.esc(a.name)}" e ${n} lançamento(s)? Não há como desfazer.`, { ok: 'Excluir definitivamente', danger: true }))) return false;
       await Store.removeMany('transactions', F.txs().filter((t) => t.account_id === a.id || t.to_account_id === a.id).map((t) => t.id));
     } else if (!(await UI.confirm(`Excluir a conta "${U.esc(a.name)}"?`, { ok: 'Excluir', danger: true }))) return false;
     await Store.remove('accounts', a.id);
     Store.all('goals').filter((g) => g.account_id === a.id).forEach((g) => Store.upsert('goals', { ...g, account_id: null }));
-    UI.toast('Conta excluída', 'ok'); App.go('contas'); return true;
+    UI.toast('Conta excluída', 'ok'); App.go(a.type === 'cartao' ? 'cartoes' : 'contas'); return true;
   }
 
   async function adjust(a) {
@@ -121,7 +129,69 @@ Views.contas = (() => {
     UI.toast(r ? `Ajuste de ${U.money(Math.abs(v - cur))} lançado` : 'O saldo já está correto', 'ok');
   }
 
-  return { title: 'Contas e cartões', render, bind, form, adjust };
+  return { title: 'Contas', render, bind, form, adjust, card };
+})();
+
+/** Campo de busca que re-renderiza sem perder o foco */
+function bindSearch(el, set) {
+  if (!el) return;
+  el.addEventListener('input', U.debounce(() => { set(el.value); App.render(); const n = document.getElementById(el.id); if (n) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); } }, 250));
+}
+
+/* Cartões de crédito: faturas, limite e vencimentos */
+Views.cartoes = (() => {
+  const { $, $$, icon } = UI;
+  let showArchived = false; let q = '';
+  function info(a) {
+    const inv = a.closing_day ? F.invoices(a.id) : [];
+    const aberta = inv.find((i) => i.status === 'Aberta');
+    const fechada = inv.find((i) => i.status === 'Fechada');
+    const used = Math.max(0, -F.balance(a.id, { mode: 'previsto', until: '9999-12-31' }));
+    return { aberta, fechada, used };
+  }
+  function render() {
+    const todos = F.accounts(showArchived).filter((a) => a.type === 'cartao');
+    const cards = todos.filter((a) => accMatch(a, q));
+    const ifs = todos.map((a) => ({ a, ...info(a) }));
+    const lim = todos.reduce((s, a) => s + (a.credit_limit || 0), 0), used = ifs.reduce((s, x) => s + x.used, 0);
+    const abertas = ifs.reduce((s, x) => s + (x.aberta ? Math.max(0, x.aberta.total - x.aberta.paid) : 0), 0);
+    const apagar = ifs.filter((x) => x.fechada).map((x) => ({ ...x.fechada, a: x.a })).sort((p, r) => String(p.vencimento).localeCompare(String(r.vencimento)));
+    const totPagar = apagar.reduce((s, i) => s + Math.max(0, i.total - i.paid), 0);
+    return `
+    <div class="kpis">
+      <div class="kpi has-ic t-neg"><div class="kic">${icon('card')}</div><span>Faturas fechadas a pagar</span><b class="money">${U.money(totPagar)}</b><small>${apagar.length ? 'próximo vencimento ' + (apagar[0].vencimento ? U.fmtDate(apagar[0].vencimento) : '—') : 'nenhuma fatura fechada'}</small></div>
+      <div class="kpi has-ic t-warn"><div class="kic">${icon('calendar')}</div><span>Faturas em aberto</span><b class="money">${U.money(abertas)}</b><small>compras do ciclo atual</small></div>
+      <div class="kpi has-ic"><div class="kic">${icon('wallet')}</div><span>Limite total</span><b class="money">${U.money(lim)}</b><small>usado ${U.money(used)}</small></div>
+      <div class="kpi has-ic t-pos"><div class="kic">${icon('check')}</div><span>Limite disponível</span><b class="money">${U.money(Math.max(0, lim - used))}</b><small>${lim ? Math.round(used / lim * 100) + '% do limite em uso' : 'informe o limite dos cartões'}</small></div>
+    </div>
+    <div class="filters">
+      <input class="input search" id="cardq" placeholder="Buscar cartão ou banco…" value="${U.esc(q)}">
+      <label class="check small chipcheck"><input type="checkbox" id="charch" ${showArchived ? 'checked' : ''}> Mostrar arquivados</label>
+      <span class="spacer"></span>
+      <button class="btn primary" data-new>${icon('plus')}Novo cartão</button>
+    </div>
+    ${cards.length ? `<div class="acc-grid">${cards.map((a) => tile(a, ifs.find((x) => x.a.id === a.id))).join('')}</div>` : `<div class="card empty">${q ? 'Nenhum cartão encontrado para "' + U.esc(q) + '".' : 'Nenhum cartão de crédito cadastrado. Use <b>Novo cartão</b>.'}</div>`}
+    <p class="small muted" style="margin-top:14px">Compras no cartão são despesas. O pagamento da fatura é uma transferência da conta para o cartão (botão <b>Pagar fatura</b>). Créditos no cartão ${F.cardCreditIsIncome() ? '<b>contam</b>' : '<b>não contam</b>'} como receita (<a href="#/config">Configurações</a>).</p>`;
+  }
+  function tile(a, x) {
+    const pc = a.credit_limit ? x.used / a.credit_limit : 0;
+    const f = x.fechada, ab = x.aberta;
+    return `<div class="card acc" data-acc="${a.id}" style="--c:${U.esc(a.color || '#7c3aed')}">
+      <div class="row between"><div><h4>${U.esc(a.name)}</h4><span class="small muted">${U.esc(a.bank || 'Cartão de crédito')}${a.archived ? ' • arquivado' : ''}${a.closing_day ? ' • fecha dia ' + a.closing_day + (a.due_day ? ', vence dia ' + a.due_day : '') : ''}</span></div>${icon('card')}</div>
+      <div class="bal money">${U.money(ab ? Math.max(0, ab.total - ab.paid) : 0)}</div>
+      <div class="small muted">Fatura atual${ab && ab.vencimento ? ' • vence ' + U.fmtDate(ab.vencimento) : ''}</div>
+      ${f && f.total > f.paid ? `<div class="small" style="margin-top:6px"><span class="badge ${f.vencimento && f.vencimento < U.today() ? 'neg' : 'warn'}">fatura fechada ${U.money(f.total - f.paid)}${f.vencimento ? ' • ' + U.fmtDate(f.vencimento) : ''}</span></div>` : ''}
+      ${a.credit_limit ? `<div class="bar ${pc > 1 ? 'over' : pc > 0.85 ? 'near' : ''}" style="margin-top:10px"><i style="width:${Math.min(100, pc * 100).toFixed(1)}%"></i></div><div class="row between small muted" style="margin-top:4px"><span>Usado ${U.money(x.used)}</span><span>Disponível ${U.money(a.credit_limit - x.used)}</span></div>` : ''}
+      ${!a.closing_day ? '<p class="small warn" style="margin:8px 0 0">Informe o dia de fechamento (Editar) para ver as faturas.</p>' : ''}
+    </div>`;
+  }
+  function bind(root) {
+    $('#charch', root).onchange = (e) => { showArchived = e.target.checked; App.render(); };
+    bindSearch($('#cardq', root), (v) => (q = v));
+    $('[data-new]', root).onclick = () => Views.contas.form(null, { type: 'cartao' });
+    $$('[data-acc]', root).forEach((c) => (c.onclick = () => App.go('conta', c.dataset.acc)));
+  }
+  return { title: 'Cartões de crédito', render, bind };
 })();
 
 /* Detalhe de uma conta */
@@ -150,7 +220,7 @@ Views.conta = (() => {
     })() : '';
     return `
     <div class="row between" style="margin-bottom:12px">
-      <a href="#/contas" class="btn ghost sm">${icon('left')}Contas</a>
+      <a href="#/${isCard ? 'cartoes' : 'contas'}" class="btn ghost sm">${icon('left')}${isCard ? 'Cartões' : 'Contas'}</a>
       <div class="row">
         <button class="btn sm" data-a="edit">${icon('edit')}Editar</button>
         <button class="btn sm" data-a="adjust">Ajustar saldo</button>

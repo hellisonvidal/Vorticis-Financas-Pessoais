@@ -57,9 +57,24 @@ const F = (() => {
       return v;
     }
     if (t.account_id !== accId) return 0;
-    return t.type === 'receita' ? t.amount : -t.amount;
+    const v = t.type === 'receita' ? t.amount : -t.amount;
+    return t.estorno ? -v : v; // estorno: o dinheiro volta (despesa) ou sai de novo (receita)
   }
   const isDone = (t) => t.status !== 'pendente';
+  /** Valor do lançamento no seu próprio tipo: estorno de despesa reduz as despesas, estorno de receita reduz as receitas */
+  const val = (t) => (t.estorno ? -t.amount : t.amount);
+  /** Créditos em cartão (pagamento de fatura, devoluções, valores do cartão para a conta) contam como receita? Padrão: não */
+  const cardCreditIsIncome = () => Store.getMeta('card_credit_income', false) === true;
+  const isCardCredit = (t) => t.type === 'receita' && !t.estorno && (Store.get('accounts', t.account_id) || {}).type === 'cartao';
+  /** O lançamento entra nos totais de receitas/despesas? (transferências, ajustes e — se configurado — créditos no cartão ficam de fora) */
+  function counted(t, { includeAdjust = false } = {}) {
+    if (t.type === 'transferencia') return false;
+    if (!includeAdjust && t.category_id === ADJ_CAT) return false;
+    if (isCardCredit(t) && !cardCreditIsIncome()) return false;
+    return true;
+  }
+  /** Lançamento parcelado: criado como parcelas no app ou com "(n/m)" na descrição (importados) */
+  const isParcelado = (t) => (t.installments > 1 && (t.repeat === 'parcelas' || !t.repeat)) || /\(\s*\d{1,3}\s*\/\s*\d{1,3}\s*\)|\bparc(?:ela)?\.?\s*\d{1,3}\s*(?:\/|de)\s*\d{1,3}/i.test(t.description || '');
 
   /**
    * Saldo de uma conta.
@@ -95,16 +110,16 @@ const F = (() => {
   function summary(from, to, { accountId = null, onlyDone = false, includeAdjust = false } = {}) {
     let rec = 0, desp = 0; const porCat = {};
     for (const t of txs()) {
-      if (t.type === 'transferencia' || t.date < from || t.date > to) continue;
+      if (t.date < from || t.date > to || !counted(t, { includeAdjust })) continue;
       if (accountId && t.account_id !== accountId) continue;
       if (onlyDone && !isDone(t)) continue;
-      if (!includeAdjust && t.category_id === ADJ_CAT) continue;
       const acc = Store.get('accounts', t.account_id); if (acc && acc.include_total === false && !accountId) continue;
-      if (t.type === 'receita') rec += t.amount; else desp += t.amount;
+      const v = val(t);
+      if (t.type === 'receita') rec += v; else desp += v;
       const k = (t.category_id || '') + '|' + t.type;
-      porCat[k] = (porCat[k] || 0) + t.amount;
+      porCat[k] = (porCat[k] || 0) + v;
     }
-    const cats = Object.entries(porCat).map(([k, v]) => { const [id, type] = k.split('|'); return { id, type, name: catName(id), color: catColor(id), total: v }; }).sort((a, b) => b.total - a.total);
+    const cats = Object.entries(porCat).filter(([, v]) => v > 0).map(([k, v]) => { const [id, type] = k.split('|'); return { id, type, name: catName(id), color: catColor(id), total: v }; }).sort((a, b) => b.total - a.total);
     return { receitas: rec, despesas: desp, resultado: rec - desp, cats };
   }
 
@@ -178,8 +193,8 @@ const F = (() => {
       const inv = (map[ym] = map[ym] || { ym, compras: 0, creditos: 0, pagamentos: 0, itens: [] });
       if (t.type === 'transferencia' && t.to_account_id === accId) inv.pagamentos += t.amount;
       else if (t.type === 'transferencia') inv.compras += t.amount;
-      else if (t.type === 'despesa') inv.compras += t.amount;
-      else inv.creditos += t.amount;
+      else if (t.type === 'despesa') inv.compras += val(t); // estorno de compra abate da fatura
+      else inv.creditos += val(t);
       inv.itens.push(t);
     }
     const curYM = invoiceMonth(acc, U.today());
@@ -231,6 +246,6 @@ const F = (() => {
   return {
     ACCOUNT_TYPES, TX_TYPES, ADJ_CAT, DEFAULT_CATEGORIES, seedIfEmpty, accounts, categories, txs, catName, catColor, accName,
     effect, balance, totals, summary, monthly, netWorthSeries, createTransaction, adjustBalance, invoiceMonth, invoices,
-    budgetStatus, buildLearner, upcoming, isDone,
+    budgetStatus, buildLearner, upcoming, isDone, val, counted, isCardCredit, cardCreditIsIncome, isParcelado,
   };
 })();
