@@ -71,8 +71,22 @@ jobs:
           echo "pluggy -> HTTP $code (sem login, o esperado é 401)"; cat /tmp/f.json; echo
           [ "$code" = "401" ]
 
+          # O webhook é público (a Pluggy não envia JWT). Logo após o deploy o gateway pode levar
+          # alguns segundos para aplicar o "verify_jwt = false"; por isso tenta algumas vezes.
           wh_header=()
-          if [ -n "${PLUGGY_WEBHOOK_SECRET:-}" ]; then wh_header=(-H "x-webhook-secret: $PLUGGY_WEBHOOK_SECRET"); fi
-          wcode=$(curl -sS -o /tmp/w.json -w '%{http_code}' -X POST "https://$SUPABASE_PROJECT_REF.supabase.co/functions/v1/pluggy-webhook" -H 'Content-Type: application/json' "${wh_header[@]}" -d '{"event":"item/updated","eventId":"test-healthcheck"}')
-          echo "pluggy-webhook -> HTTP $wcode (esperado: 200)"; cat /tmp/w.json; echo
-          [ "$wcode" = "200" ]
+          if [ -n "${PLUGGY_WEBHOOK_SECRET:-}" ]; then wh_header=(-H "x-webhook-secret: $PLUGGY_WEBHOOK_SECRET"); echo "Testando com x-webhook-secret"; else echo "PLUGGY_WEBHOOK_SECRET não definido (opcional): testando sem header"; fi
+          wcode=000
+          for i in 1 2 3 4 5 6; do
+            wcode=$(curl -sS -o /tmp/w.json -w '%{http_code}' -X POST "https://$SUPABASE_PROJECT_REF.supabase.co/functions/v1/pluggy-webhook" -H 'Content-Type: application/json' "${wh_header[@]}" -d '{"event":"item/updated","eventId":"test-healthcheck"}' || echo 000)
+            echo "pluggy-webhook -> tentativa $i: HTTP $wcode (esperado: 200)"; cat /tmp/w.json; echo
+            [ "$wcode" = "200" ] && break
+            sleep 10
+          done
+          if [ "$wcode" != "200" ]; then
+            if grep -qiE 'JWT|authorization header' /tmp/w.json; then
+              echo "::error::O Supabase está exigindo login (JWT) no webhook. Confira em Edge Functions > pluggy-webhook > Details que 'Enforce JWT Verification' está DESLIGADO e rode este workflow de novo."
+            elif grep -qi 'Webhook não autorizado' /tmp/w.json; then
+              echo "::error::O secret PLUGGY_WEBHOOK_SECRET do Supabase é diferente do secret do GitHub. Rode este workflow com os dois iguais (ou remova o do Supabase)."
+            fi
+            exit 1
+          fi

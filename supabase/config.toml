@@ -1,0 +1,12 @@
+# Configuração mínima do Supabase CLI usada no "functions deploy".
+# project_id aqui é só um nome local (o projeto real vem do secret SUPABASE_PROJECT_REF).
+project_id = "vorticis-financas-pessoais"
+
+# A Pluggy chama o webhook sem login do Supabase (sem JWT). Sem isto, o gateway do
+# Supabase recusa a chamada com 401 "JWT could not be decoded" / "Missing authorization header".
+[functions.pluggy-webhook]
+verify_jwt = false
+
+# A função do app exige o login do usuário.
+[functions.pluggy]
+verify_jwt = true
