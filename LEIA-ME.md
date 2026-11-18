@@ -19,7 +19,7 @@ Com a sincronização ativada (Supabase, gratuito), o que você lança no comput
 - **Estorno**: ao lançar uma receita ou despesa, marque **Estorno** (abaixo da conta) quando um valor for devolvido, como compra cancelada ou cobrança indevida. O estorno de despesa devolve o dinheiro à conta e **abate das despesas** daquela categoria, sem virar receita.
 - **Créditos no cartão não são receita** (padrão): pagamento de fatura, devoluções e valores que saem do cartão para a conta não entram como receita. Dá para mudar em **Configurações → Cálculo de receitas**.
 - **Contas**, **Cartões de crédito** e **Empréstimos e financiamentos** em telas separadas. Cartões mostram fatura atual, faturas fechadas a pagar, limite e vencimentos. Empréstimos mostram saldo devedor, parcelas, juros e quando termina cada contrato.
-- **Busca em todas as telas** e filtro **Só parcelados** nas listas de lançamentos (parcelas criadas no app ou com "(3/10)" / "PARC 03/10" na descrição).
+- **Busca em todas as telas** e filtro **Parcelamentos** em Despesas e na lista do Painel (parcelas criadas no app ou com "(3/10)" / "PARC 03/10" na descrição).
 - **Lançamentos**: receitas, despesas e transferências. Têm status pago/pendente, observações e etiquetas. Podem ser **parcelados** (o valor é dividido e a diferença de centavos fica na 1ª parcela) ou **recorrentes** (mensal, semanal, quinzenal, anual). A lista tem filtros, busca (inclusive por valor) e ações em lote.
 - **Cartão de crédito**: limite usado e disponível, **faturas** por ciclo (pelo dia de fechamento e de vencimento), situação (aberta, fechada, paga) e botão "Pagar fatura".
 - **Importação de extratos**:
