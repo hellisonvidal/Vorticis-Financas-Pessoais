@@ -162,7 +162,7 @@ const TxScreens = (() => {
       <select class="input" data-f="category">${UI.opt('', 'Todas as categorias', f.category)}${UI.opt('__none', 'Sem categoria', f.category)}${F.categories(kind || undefined).map((c) => UI.opt(c.id, c.name, f.category)).join('')}</select>
       ${kind ? '' : `<select class="input" data-f="type">${UI.opt('', 'Todos os tipos', f.type)}${types}</select>`}
       <select class="input" data-f="status">${statusOpts}</select>
-      <label class="check small chipcheck"><input type="checkbox" data-parc ${f.parc ? 'checked' : ''}> Só parcelados</label>
+      ${kind === 'receita' ? '' : `<label class="check small chipcheck"><input type="checkbox" data-parc ${f.parc ? 'checked' : ''}> Parcelamentos</label>`}
     </div>
     ${kind === 'receita' ? cardNote() : ''}
     ${embedded ? `<p class="small muted" style="margin:-4px 0 10px">${list.length} lançamento(s) • receitas <b class="money pos">${U.money(sum(list.filter((t) => t.type === 'receita' && cnt(t))))}</b> • despesas <b class="money neg">${U.money(sum(list.filter((t) => t.type === 'despesa' && cnt(t))))}</b></p>` : kpis}
@@ -247,7 +247,7 @@ const TxScreens = (() => {
       R.title = K.title;
       R.sections[0].items = [{ label: K.title, text: String(list.length) }, { label: 'Total', value: tot, cls: K.cls }, { label: K.done, value: tot - pend }, { label: K.pend, value: pend }];
     } else R.sections[0].items = [{ label: 'Lançamentos', text: String(list.length) }, { label: 'Receitas', value: rec, cls: 'pos' }, { label: 'Despesas', value: desp, cls: 'neg' }, { label: 'Resultado', value: rec - desp, cls: rec - desp >= 0 ? 'pos' : 'neg' }];
-    R.subtitle = [f.mode === 'all' ? 'Todo o período' : `${U.fmtDate(from)} a ${U.fmtDate(to)}`, f.account ? 'Conta: ' + F.accName(f.account) : '', f.category ? 'Categoria: ' + (f.category === '__none' ? 'Sem categoria' : F.catName(f.category)) : '', f.q ? 'Busca: ' + f.q : '', f.parc ? 'Só parcelados' : ''].filter(Boolean).join(' • ');
+    R.subtitle = [f.mode === 'all' ? 'Todo o período' : `${U.fmtDate(from)} a ${U.fmtDate(to)}`, f.account ? 'Conta: ' + F.accName(f.account) : '', f.category ? 'Categoria: ' + (f.category === '__none' ? 'Sem categoria' : F.catName(f.category)) : '', f.q ? 'Busca: ' + f.q : '', f.parc ? 'Parcelamentos' : ''].filter(Boolean).join(' • ');
     const name = (kind ? K.title.toLowerCase() : 'lancamentos') + '-' + U.fileStamp();
     const p = fmt === 'pdf' ? Reports.toPDF(R, name) : fmt === 'xlsx' ? Reports.toXLSX(R, name) : Reports.toCSV(R, name);
     Promise.resolve(p).then((r) => UI.toast(typeof r === 'string' ? 'Salvo em ' + r : 'Arquivo gerado', 'ok')).catch((e) => UI.toast(e.message, 'error'));
