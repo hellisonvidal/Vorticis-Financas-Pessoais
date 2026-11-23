@@ -9,7 +9,6 @@ Views.config = (() => {
     const nTx = F.txs().length, nDirty = Store.dirty().length;
     const hasPin = !!Store.getMeta('pin_hash');
     const theme = Store.getMeta('theme', 'auto');
-    const batches = Store.getMeta('import_batches', []).filter((b) => F.txs().some((t) => t.import_batch === b.id));
     const platform = U.isNative() ? 'Aplicativo Android' : navigator.userAgent.includes('Electron') ? 'Aplicativo Windows' : 'Navegador';
     return `<div class="grid g2">
     <div class="card">
@@ -56,7 +55,6 @@ Views.config = (() => {
     <div class="card">
       <h3>Dados</h3>
       <p class="small">${nTx} lançamento(s) • ${F.accounts(true).length} conta(s) • ${F.categories().length} categoria(s) • armazenamento: ${Store.usingIDB ? 'IndexedDB' : 'localStorage'} • ${platform} • versão ${VERSION}</p>
-      ${batches.length ? `<h3 style="margin-top:12px">Importações recentes</h3><ul class="mini">${batches.slice(0, 6).map((b) => `<li><span>${U.esc(b.file)} <small class="muted">${new Date(b.at).toLocaleString('pt-BR')} • ${U.esc(F.accName(b.account_id))}</small></span><button class="btn sm danger" data-undo="${b.id}">Desfazer</button></li>`).join('')}</ul>` : ''}
       <div class="row" style="margin-top:12px">
         <button class="btn" id="dsample">Carregar dados de exemplo</button>
         ${F.txs().some((t) => t.sample) || F.accounts(true).some((a) => a.sample) ? '<button class="btn" id="dclearsample">Remover dados de exemplo</button>' : ''}
