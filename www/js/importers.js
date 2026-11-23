@@ -4,36 +4,70 @@
 
 const Importers = (() => {
   // ---------------- OFX ----------------
+  function parseOFXMoney(s) {
+    if (!s) return null;
+    return U.parseMoney(s, s.includes(',') ? (s.includes('.') ? 'auto' : ',') : '.');
+  }
   function parseOFX(text) {
-    const body = text.replace(/\r/g, '');
+    // Normaliza \r\n e \r solto para \n e desencapsula blocos CDATA antes de extrair as tags
+    const body = String(text || '')
+      .replace(/\r\n?/g, '\n')
+      .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/gi, (_, c) => c.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/[\r\n]+/g, ' '));
     const tag = (blk, name) => {
-      const m = blk.match(new RegExp('<' + name + '>\\s*([^<\\n]*)', 'i'));
+      const m = blk.match(new RegExp('<' + name + '(?:\\s[^>]*)?>\\s*([^<\\r\\n]*)', 'i'));
       return m ? decodeEntities(m[1].trim()) : '';
     };
     const rows = [];
-    const re = /<STMTTRN>([\s\S]*?)(?:<\/STMTTRN>|(?=<STMTTRN>)|(?=<\/BANKTRANLIST>))/gi;
+    const re = /<STMTTRN(?:\s[^>]*)?>([\s\S]*?)(?:<\/STMTTRN\s*>|(?=<STMTTRN[\s>])|(?=<\/BANKTRANLIST\s*>)|(?=<LEDGERBAL[\s>])|(?=<AVAILBAL[\s>])|(?=<BALLIST[\s>])|(?=<\/STMTRS\s*>)|(?=<\/CCSTMTRS\s*>)|(?=<\/INVSTMTRS\s*>)|(?=<\/OFX\s*>)|$)/gi;
     let m;
     while ((m = re.exec(body))) {
       const b = m[1];
-      const ra = tag(b, 'TRNAMT');
-      const amount = U.parseMoney(ra, ra.includes(',') ? (ra.includes('.') ? 'auto' : ',') : '.');
-      const date = U.parseDate(tag(b, 'DTPOSTED')) || U.parseDate(tag(b, 'DTUSER'));
+      const amount = parseOFXMoney(tag(b, 'TRNAMT'));
+      const date = U.parseDate(tag(b, 'DTPOSTED')) || U.parseDate(tag(b, 'DTUSER')) || U.parseDate(tag(b, 'DTAVAIL'));
       if (amount === null || !date) continue;
-      const memo = tag(b, 'MEMO'), name = tag(b, 'NAME');
+      const memo = tag(b, 'MEMO'), name = tag(b, 'NAME'), trntype = tag(b, 'TRNTYPE');
       let description = [name, memo].filter(Boolean).join(' - ');
       if (name && memo && (U.norm(memo).includes(U.norm(name)) || U.norm(name).includes(U.norm(memo)))) description = memo.length >= name.length ? memo : name;
-      rows.push({ date, amount, description: description || tag(b, 'TRNTYPE') || 'Lançamento', fitid: tag(b, 'FITID') || null, checknum: tag(b, 'CHECKNUM') || null });
+      const rawFit = tag(b, 'FITID');
+      const fitid = rawFit && !/^(0+|n\/?a|-+)$/i.test(rawFit) ? rawFit : null;
+      rows.push({ date, amount, description: description || trntype || 'Lançamento', fitid, checknum: tag(b, 'CHECKNUM') || null, _trntype: trntype });
     }
+    const isDebitType = (t) => /^(DEBIT|DEB|DEBITO|D|PAYMENT|ATM|POS|FEE|SRVCHG|CHECK)$/i.test(String(t || '').trim());
+    if (rows.length && rows.every((r) => r.amount >= 0) && rows.some((r) => isDebitType(r._trntype))) {
+      rows.forEach((r) => { if (isDebitType(r._trntype) && r.amount > 0) r.amount = -r.amount; });
+    }
+    // Bancos que repetem o mesmo FITID no arquivo (ex.: data do dia ou número de lote) ganham sufixo determinístico
+    const fitTotals = new Map();
+    rows.forEach((r) => { delete r._trntype; if (r.fitid) fitTotals.set(r.fitid, (fitTotals.get(r.fitid) || 0) + 1); });
+    const fitSeen = new Map();
+    rows.forEach((r) => {
+      if (r.fitid && fitTotals.get(r.fitid) > 1) {
+        const k = `${r.fitid}|${r.date}|${r.amount}`;
+        const n = (fitSeen.get(k) || 0) + 1;
+        fitSeen.set(k, n);
+        r.fitid = `${r.fitid}#${n}:${r.date}:${r.amount}`;
+      }
+    });
     const info = {
       bankId: tag(body, 'BANKID') || tag(body, 'ORG'), acctId: tag(body, 'ACCTID'), currency: tag(body, 'CURDEF'),
-      start: U.parseDate(tag(body, 'DTSTART')), end: U.parseDate(tag(body, 'DTEND')), isCard: /<CCSTMTRS>/i.test(body),
+      start: U.parseDate(tag(body, 'DTSTART')), end: U.parseDate(tag(body, 'DTEND')), isCard: /<CCSTMTRS[\s>]|<CREDITCARDMSGSRSV1[\s>]|<CCACCTFROM[\s>]/i.test(body),
     };
-    const lb = body.match(/<LEDGERBAL>([\s\S]*?)(<\/LEDGERBAL>|<AVAILBAL>|<\/STMTRS>|<\/CCSTMTRS>)/i);
-    if (lb) { info.balance = U.parseMoney(tag(lb[1], 'BALAMT'), '.'); info.balanceDate = U.parseDate(tag(lb[1], 'DTASOF')); }
-    if (!rows.length && !/<OFX>/i.test(body)) throw new Error('Arquivo não parece ser um OFX válido.');
+    const lb = body.match(/<LEDGERBAL(?:\s[^>]*)?>([\s\S]*?)(?:<\/LEDGERBAL\s*>|<AVAILBAL[\s>]|<\/STMTRS\s*>|<\/CCSTMTRS\s*>|<\/OFX\s*>|$)/i);
+    if (lb) { info.balance = parseOFXMoney(tag(lb[1], 'BALAMT')); info.balanceDate = U.parseDate(tag(lb[1], 'DTASOF')); }
+    if (!rows.length && !/<OFX[\s>]|OFXHEADER|<STMTTRN[\s>]/i.test(body)) throw new Error('Arquivo não parece ser um OFX válido.');
     return { rows, info };
   }
-  function decodeEntities(s) { return s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n)); }
+  function decodeEntities(s) {
+    return s
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&quot;/gi, '"')
+      .replace(/&apos;/gi, "'")
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n))
+      .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCharCode(parseInt(h, 16)));
+  }
 
   // ---------------- CSV ----------------
   function detectDelimiter(text) {
@@ -74,7 +108,7 @@ const Importers = (() => {
   // ---------------- Excel ----------------
   async function parseSheet(file) {
     if (!globalThis.XLSX) throw new Error('Biblioteca de planilhas não carregada.');
-    const buf = await file.arrayBuffer();
+    const buf = await U.readBuffer(file);
     const wb = XLSX.read(buf, { type: 'array', cellDates: true });
     const sheets = wb.SheetNames.map((name) => ({ name, grid: XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: '', blankrows: false }) }));
     return sheets;
@@ -162,7 +196,7 @@ const Importers = (() => {
   /** Extrai as linhas de texto de um PDF, agrupando por posição vertical */
   async function pdfLines(file, password) {
     await loadPdfJs();
-    const data = new Uint8Array(await file.arrayBuffer());
+    const data = new Uint8Array(await U.readBuffer(file));
     const doc = await pdfjsLib.getDocument({ data, password: password || undefined, isEvalSupported: false }).promise;
     const lines = [];
     for (let p = 1; p <= doc.numPages; p++) {
@@ -225,40 +259,44 @@ const Importers = (() => {
   /** Marca linhas já existentes na conta: 'dup' (certeza) ou 'maybe' (mesma data e valor) */
   function markDuplicates(rows, accountId) {
     const existing = F.txs().filter((t) => t.account_id === accountId || t.to_account_id === accountId);
-    const fit = new Set(existing.filter((t) => t.fitid).map((t) => t.fitid));
+    const fit = new Map();
     const strong = new Map(); const weak = new Map();
     existing.forEach((t) => {
+      if (t.fitid) fit.set(t.fitid, (fit.get(t.fitid) || 0) + 1);
       const v = F.effect(t, accountId);
       const ks = t.date + '|' + v + '|' + U.descKey(t.description);
       strong.set(ks, (strong.get(ks) || 0) + 1);
       const kw = t.date + '|' + v; weak.set(kw, (weak.get(kw) || 0) + 1);
     });
-    const seenFit = new Set();
     rows.forEach((r) => {
       r.dup = null;
-      if (r.fitid) {
-        if (fit.has(r.fitid) || seenFit.has(r.fitid)) { r.dup = 'dup'; return; }
-        seenFit.add(r.fitid);
-      }
       const ks = r.date + '|' + r.amount + '|' + U.descKey(r.description);
-      if (strong.get(ks) > 0) { strong.set(ks, strong.get(ks) - 1); r.dup = 'dup'; const kw = r.date + '|' + r.amount; weak.set(kw, (weak.get(kw) || 1) - 1); return; }
       const kw = r.date + '|' + r.amount;
+      if (r.fitid && fit.get(r.fitid) > 0) {
+        fit.set(r.fitid, fit.get(r.fitid) - 1);
+        if (strong.get(ks) > 0) strong.set(ks, strong.get(ks) - 1);
+        if (weak.get(kw) > 0) weak.set(kw, weak.get(kw) - 1);
+        r.dup = 'dup';
+        return;
+      }
+      if (strong.get(ks) > 0) { strong.set(ks, strong.get(ks) - 1); r.dup = 'dup'; weak.set(kw, (weak.get(kw) || 1) - 1); return; }
       if (weak.get(kw) > 0) { weak.set(kw, weak.get(kw) - 1); r.dup = 'maybe'; }
     });
     return rows;
   }
 
   async function readAny(file) {
-    const name = file.name.toLowerCase();
+    const name = String((file && file.name) || '').trim().toLowerCase();
     if (/\.(ofx|qfx)$/.test(name)) return { kind: 'ofx', ...parseOFX(await U.readText(file)) };
     if (/\.(xlsx|xls|xlsm|ods)$/.test(name)) return { kind: 'sheet', sheets: await parseSheet(file) };
-    if (/\.pdf$/.test(name)) return { kind: 'pdf', lines: await pdfLines(file) };
+    if (/\.pdf$/.test(name) || (file && file.type === 'application/pdf')) return { kind: 'pdf', lines: await pdfLines(file) };
     const text = await U.readText(file);
-    if (/<OFX>|OFXHEADER/i.test(text.slice(0, 2000))) return { kind: 'ofx', ...parseOFX(text) };
+    if (/<OFX[\s>]|OFXHEADER|<STMTTRN[\s>]|<BANKMSGSRSV1[\s>]|<CREDITCARDMSGSRSV1[\s>]/i.test(text.slice(0, 4000))) return { kind: 'ofx', ...parseOFX(text) };
     if (/\.json$/.test(name)) return { kind: 'json', data: JSON.parse(text) };
     const csv = parseCSV(text);
-    return { kind: 'sheet', sheets: [{ name: file.name, grid: csv.grid }], delimiter: csv.delimiter };
+    return { kind: 'sheet', sheets: [{ name: (file && file.name) || 'Extrato', grid: csv.grid }], delimiter: csv.delimiter };
   }
 
   return { parseOFX, parseCSV, parseSheet, guessMapping, gridToRows, pdfLines, textToRows, markDuplicates, readAny, loadPdfJs };
 })();
+if (typeof module !== 'undefined') module.exports = Importers;

@@ -288,5 +288,5 @@ Views.conta = (() => {
     }));
   }
 
-  return { title, render, bind };
+  return { title, render, bind, setMonth: (m) => { month = m; } };
 })();

@@ -21,7 +21,7 @@ Views.importar = (() => {
       <div class="card">
         <label class="field" style="margin-bottom:14px"><span>Importar para a conta</span><select class="input" id="iacc">${UI.accountOptions(S.accountId)}</select></label>
         <div class="drop" id="drop">${icon('importar')}<p><b>Clique para escolher</b> ou arraste o arquivo do extrato aqui</p><p class="small">OFX/QFX • CSV/TXT • Excel (XLS, XLSX, ODS) • PDF</p>${S.busy ? '<p><b>Lendo arquivo…</b></p>' : ''}</div>
-        <input type="file" id="ifile" accept=".ofx,.qfx,.csv,.txt,.xls,.xlsx,.xlsm,.ods,.pdf,application/pdf,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+        <input type="file" id="ifile" hidden>
         <details style="margin-top:14px"><summary class="small" style="cursor:pointer">Ou colar o texto do extrato (copiado do internet banking ou de um PDF)</summary>
           <textarea class="input" id="ipaste" rows="7" style="margin-top:8px" placeholder="05/03/2026  PIX RECEBIDO FULANO   1.250,00&#10;06/03/2026  COMPRA CARTAO MERCADO   -235,90"></textarea>
           <div class="row" style="margin-top:8px"><label class="field" style="width:120px"><span>Ano (se faltar)</span><input class="input" type="number" id="iyear" value="${S.year}"></label><span class="spacer"></span><button class="btn" id="iparse">Interpretar texto</button></div>
@@ -108,9 +108,11 @@ Views.importar = (() => {
 
   async function handleFile(file) {
     if (!file) return;
-    S.busy = true; App.render();
+    S.busy = true;
+    const dropEl = document.getElementById('drop');
+    if (dropEl && !dropEl.querySelector('[data-busy]')) dropEl.insertAdjacentHTML('beforeend', '<p data-busy><b>Lendo arquivo…</b></p>');
     try {
-      S.fileName = file.name; S.info = null; S.lines = null;
+      S.fileName = file.name || 'Extrato'; S.info = null; S.lines = null;
       const r = await Importers.readAny(file);
       S.kind = r.kind;
       if (r.kind === 'json') { S.busy = false; App.render(); return UI.toast('Arquivo JSON: use Configurações → Restaurar backup.', 'error', 5000); }
@@ -182,6 +184,12 @@ Views.importar = (() => {
     await Store.setMeta('last_import_account', acc.id);
     const batches = Store.getMeta('import_batches', []); batches.unshift({ id: batch, account_id: acc.id, file: S.fileName, count: recs.length, at: new Date().toISOString() }); await Store.setMeta('import_batches', batches.slice(0, 30));
     UI.toast(`${recs.length} lançamento(s) importado(s) para ${acc.name}`, 'ok', 4500);
+    if (recs.length) {
+      const months = [...new Set(recs.map((r) => U.monthOf(r.date)))].sort();
+      const targetMonth = months.includes(App.state.month) ? App.state.month : months[months.length - 1];
+      App.state.month = targetMonth;
+      if (Views.conta && Views.conta.setMonth) Views.conta.setMonth(targetMonth);
+    }
     const info = S.info;
     S = fresh(acc.id);
     App.go('conta', acc.id);
@@ -199,8 +207,8 @@ Views.importar = (() => {
     if (acc) acc.onchange = () => { S.accountId = acc.value; };
     const drop = $('#drop', root), inp = $('#ifile', root);
     if (drop) {
-      drop.onclick = () => inp.click();
-      inp.onchange = () => handleFile(inp.files[0]);
+      drop.onclick = () => { inp.value = ''; inp.click(); };
+      inp.onchange = () => { const f = inp.files && inp.files[0]; inp.value = ''; if (f) handleFile(f); };
       drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('over'); };
       drop.ondragleave = () => drop.classList.remove('over');
       drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove('over'); handleFile(e.dataTransfer.files[0]); };
