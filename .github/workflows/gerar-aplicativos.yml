@@ -101,8 +101,26 @@ jobs:
 
       - name: Chave de assinatura fixa (permite atualizar o app sem desinstalar)
         run: |
-          mkdir -p ~/.android
-          cp android-signing/debug.keystore ~/.android/debug.keystore
+          cp android-signing/debug.keystore android/app/debug.keystore
+          cat <<'GRADLE' >> android/app/build.gradle
+
+          android {
+              signingConfigs {
+                  debug {
+                      storeFile file('debug.keystore')
+                      storePassword 'android'
+                      keyAlias 'androiddebugkey'
+                      keyPassword 'android'
+                  }
+              }
+              buildTypes {
+                  debug {
+                      signingConfig signingConfigs.debug
+                  }
+              }
+          }
+          GRADLE
+          tail -n 18 android/app/build.gradle
 
       - name: Compilar APK
         working-directory: android
@@ -111,8 +129,17 @@ jobs:
           # o repositório Maven às vezes limita downloads (HTTP 429): tenta de novo após uma pausa
           ./gradlew assembleDebug --no-daemon --stacktrace || { echo "Falhou; nova tentativa em 60 s"; sleep 60; ./gradlew assembleDebug --no-daemon --stacktrace; }
 
-      - name: Renomear APK
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk VorticisFinancasPessoais.apk
+      - name: Renomear APK e conferir assinatura fixa
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk VorticisFinancasPessoais.apk
+          APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          ESPERADO=$(LC_ALL=C keytool -list -v -keystore android-signing/debug.keystore -storepass android -alias androiddebugkey | sed -n 's/.*SHA256:[[:space:]]*//p' | head -1 | tr -d ':' | tr 'A-F' 'a-f')
+          SAIDA=$("$APKSIGNER" verify --print-certs VorticisFinancasPessoais.apk)
+          echo "$SAIDA"
+          OBTIDO=$(echo "$SAIDA" | sed -n 's/.*SHA-256 digest:[[:space:]]*//p' | head -1 | tr -d '[:space:]' | tr 'A-F' 'a-f')
+          echo "Assinatura esperada: $ESPERADO"
+          echo "Assinatura do APK:   $OBTIDO"
+          test -n "$ESPERADO" && test "$ESPERADO" = "$OBTIDO"
 
       - uses: actions/upload-artifact@v4
         with:
