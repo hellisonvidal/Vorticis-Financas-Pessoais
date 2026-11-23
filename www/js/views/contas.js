@@ -55,6 +55,8 @@ Views.contas = (() => {
     const a = acc ? { ...acc } : { ...preset, type: preset.type || 'corrente', initial_balance: 0, color: UI.COLORS[F.accounts(true).length % UI.COLORS.length], include_total: true };
     const isNew = !acc;
     const hasTx = !isNew && F.txs().some((t) => t.account_id === a.id || t.to_account_id === a.id);
+    const hasLinkedCard = !isNew && F.accounts(true).some((x) => x.type === 'cartao' && x.parent_account_id === a.id);
+    const defaultCardName = (n) => { const s = String(n || '').trim(); return !s ? 'Cartão de crédito' : /^cart[aã]o\b/i.test(s) ? `${s} (Crédito)` : `Cartão ${s}`; };
     UI.modal({
       title: isNew ? (a.type === 'cartao' ? 'Novo cartão de crédito' : 'Nova conta') : (a.type === 'cartao' ? 'Editar cartão' : 'Editar conta'),
       body: `<div class="form">
@@ -63,8 +65,12 @@ Views.contas = (() => {
         <label class="field"><span>Banco / instituição</span><input class="input" id="ab" value="${U.esc(a.bank || '')}"></label>
         <label class="field"><span id="ail">Saldo inicial (R$)</span><input class="input" id="ai" inputmode="decimal" value="${U.num(a.initial_balance || 0)}"></label>
         <div class="field"><span>Opções</span><label class="check"><input type="checkbox" id="ainc" ${a.include_total !== false ? 'checked' : ''}> Somar no saldo total</label>${!isNew ? `<label class="check"><input type="checkbox" id="aarc" ${a.archived ? 'checked' : ''}> Arquivada (oculta)</label>` : ''}</div>
+        <div class="field full" id="amkcard-wrap">
+          <label class="check"><input type="checkbox" id="amkcard"> Cadastrar também o cartão de crédito desta conta</label>
+        </div>
         <div class="full" id="acard">
           <div class="form">
+            <label class="field" id="acn-wrap"><span>Nome do cartão (opcional)</span><input class="input" id="acn" placeholder="${U.esc(defaultCardName(a.name))}"></label>
             <label class="field"><span>Limite do cartão (R$)</span><input class="input" id="al" inputmode="decimal" value="${a.credit_limit ? U.num(a.credit_limit) : ''}"></label>
             <label class="field"><span>Dia de fechamento</span><input class="input" type="number" min="1" max="31" id="acl" value="${a.closing_day || ''}"></label>
             <label class="field"><span>Dia de vencimento</span><input class="input" type="number" min="1" max="31" id="adu" value="${a.due_day || ''}"></label>
@@ -75,13 +81,26 @@ Views.contas = (() => {
       </div><p class="err" id="aerr"></p>`,
       onOpen: (b) => {
         UI.bindColorPicker(b);
+        const updPlaceholder = () => { const cn = $('#acn', b); if (cn) cn.placeholder = defaultCardName($('#an', b).value); };
         const upd = () => {
           const card = $('#at', b).value === 'cartao';
-          $('#acard', b).hidden = !card;
+          const canMk = !card && !hasLinkedCard;
+          const mk = canMk && $('#amkcard', b).checked;
+          $('#amkcard-wrap', b).hidden = !canMk;
+          $('#acard', b).hidden = !(card || mk);
+          $('#acn-wrap', b).hidden = !mk;
+          updPlaceholder();
           $('#ail', b).textContent = card ? 'Saldo inicial (fatura em aberto, use valor negativo)' : 'Saldo inicial (R$)';
-          $('#ahint', b).textContent = card ? 'Cartão: compras são despesas nesta conta; o pagamento da fatura é uma transferência da conta corrente para o cartão.' : 'Saldo inicial: quanto havia na conta antes do primeiro lançamento registrado aqui. Pode corrigir depois com "Ajustar saldo".';
+          $('#ahint', b).textContent = card
+            ? 'Cartão: compras são despesas nesta conta; o pagamento da fatura é uma transferência da conta corrente para o cartão.'
+            : mk
+              ? 'O cartão de crédito será cadastrado automaticamente em Cartões de crédito (nome, limite e datas podem ser preenchidos agora ou depois).'
+              : 'Saldo inicial: quanto havia na conta antes do primeiro lançamento registrado aqui. Pode corrigir depois com "Ajustar saldo".';
         };
-        $('#at', b).onchange = upd; upd();
+        $('#an', b).oninput = updPlaceholder;
+        $('#at', b).onchange = upd;
+        $('#amkcard', b).onchange = upd;
+        upd();
       },
       actions: [
         ...(!isNew ? [{ label: icon('trash') + 'Excluir', cls: 'danger', left: true, onClick: async () => removeAcc(a, hasTx) }] : []),
@@ -91,16 +110,41 @@ Views.contas = (() => {
           const name = $('#an', b).value.trim(); if (!name) return err('Informe o nome da conta.');
           const ib = U.parseMoney($('#ai', b).value || '0'); if (ib === null) return err('Saldo inicial inválido.');
           const type = $('#at', b).value;
-          const rec = { ...a, name, type, bank: $('#ab', b).value.trim(), initial_balance: ib, include_total: $('#ainc', b).checked, color: $('[name=color]', b).value, archived: $('#aarc', b) ? $('#aarc', b).checked : false };
-          if (type === 'cartao') {
-            const lim = $('#al', b).value ? U.parseMoney($('#al', b).value) : 0; if (lim === null || lim < 0) return err('Limite inválido.');
-            const cd = +$('#acl', b).value || null, dd = +$('#adu', b).value || null;
+          const mkCard = type !== 'cartao' && !hasLinkedCard && $('#amkcard', b).checked;
+          const rec = { ...a, id: a.id || U.uuid(), name, type, bank: $('#ab', b).value.trim(), initial_balance: ib, include_total: $('#ainc', b).checked, color: $('[name=color]', b).value, archived: $('#aarc', b) ? $('#aarc', b).checked : false };
+          let lim = 0, cd = null, dd = null;
+          if (type === 'cartao' || mkCard) {
+            lim = $('#al', b).value ? U.parseMoney($('#al', b).value) : 0; if (lim === null || lim < 0) return err('Limite inválido.');
+            cd = +$('#acl', b).value || null; dd = +$('#adu', b).value || null;
             if ((cd && (cd < 1 || cd > 31)) || (dd && (dd < 1 || dd > 31))) return err('Dias devem estar entre 1 e 31.');
-            Object.assign(rec, { credit_limit: lim, closing_day: cd, due_day: dd });
+            if (type === 'cartao') Object.assign(rec, { credit_limit: lim, closing_day: cd, due_day: dd });
           }
           if (isNew) rec.order = F.accounts(true).length + 1;
-          const saved = await Store.upsert('accounts', rec);
-          UI.toast(isNew ? 'Conta criada' : 'Conta atualizada', 'ok');
+          const toSave = [rec];
+          if (mkCard) {
+            toSave.push({
+              id: U.uuid(),
+              name: ($('#acn', b).value || '').trim() || defaultCardName(name),
+              type: 'cartao',
+              bank: rec.bank,
+              initial_balance: 0,
+              include_total: rec.include_total,
+              color: rec.color,
+              archived: false,
+              credit_limit: lim,
+              closing_day: cd,
+              due_day: dd,
+              parent_account_id: rec.id,
+              order: (isNew ? rec.order : F.accounts(true).length) + 1,
+            });
+          }
+          const [saved] = await Store.upsertMany('accounts', toSave);
+          UI.toast(
+            mkCard
+              ? (isNew ? 'Conta e cartão de crédito criados' : 'Conta atualizada e cartão de crédito criado')
+              : (isNew ? (type === 'cartao' ? 'Cartão criado' : 'Conta criada') : (type === 'cartao' ? 'Cartão atualizado' : 'Conta atualizada')),
+            'ok',
+          );
           if (isNew && App.state.route !== 'conta') setTimeout(() => App.go('conta', saved.id), 0);
         } },
       ],
@@ -264,7 +308,8 @@ Views.conta = (() => {
 
   function payInvoice(a, ym) {
     const inv = F.invoices(a.id); const i = ym ? inv.find((x) => x.ym === ym) : inv.find((x) => x.status === 'Fechada') || inv.find((x) => x.status === 'Aberta');
-    const other = F.accounts().find((x) => x.type !== 'cartao' && x.id !== a.id);
+    const linked = a.parent_account_id && Store.get('accounts', a.parent_account_id);
+    const other = (linked && !linked.archived && linked.type !== 'cartao' ? linked : null) || F.accounts().find((x) => x.type !== 'cartao' && x.id !== a.id);
     if (!other) return UI.toast('Cadastre uma conta corrente para pagar a fatura.');
     Views.lancamentos.form(null, { type: 'transferencia', account_id: other.id, to_account_id: a.id, amount: i ? Math.max(0, i.total - i.paid) : 0, date: i && i.vencimento ? i.vencimento : U.today(), description: 'Pagamento fatura ' + (i ? U.fmtMonth(i.ym) : a.name), status: 'efetivada' });
   }
