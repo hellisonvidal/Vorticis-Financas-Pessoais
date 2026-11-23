@@ -287,9 +287,13 @@ const Importers = (() => {
 
   async function readAny(file) {
     const name = String((file && file.name) || '').trim().toLowerCase();
+    const mime = String((file && file.type) || '').toLowerCase();
+    if (/^(image|video|audio)\//.test(mime) || (/\.[a-z0-9]{1,8}$/.test(name) && !/\.(ofx|qfx|csv|txt|xls|xlsx|xlsm|ods|pdf|json)$/.test(name))) {
+      throw new Error('Formato não suportado. Escolha um arquivo OFX, QFX, CSV, TXT, Excel (XLS, XLSX, ODS) ou PDF.');
+    }
     if (/\.(ofx|qfx)$/.test(name)) return { kind: 'ofx', ...parseOFX(await U.readText(file)) };
     if (/\.(xlsx|xls|xlsm|ods)$/.test(name)) return { kind: 'sheet', sheets: await parseSheet(file) };
-    if (/\.pdf$/.test(name) || (file && file.type === 'application/pdf')) return { kind: 'pdf', lines: await pdfLines(file) };
+    if (/\.pdf$/.test(name) || mime === 'application/pdf') return { kind: 'pdf', lines: await pdfLines(file) };
     const text = await U.readText(file);
     if (/<OFX[\s>]|OFXHEADER|<STMTTRN[\s>]|<BANKMSGSRSV1[\s>]|<CREDITCARDMSGSRSV1[\s>]/i.test(text.slice(0, 4000))) return { kind: 'ofx', ...parseOFX(text) };
     if (/\.json$/.test(name)) return { kind: 'json', data: JSON.parse(text) };

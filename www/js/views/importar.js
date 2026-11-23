@@ -17,11 +17,15 @@ Views.importar = (() => {
   }
 
   function step1() {
+    const isAndroid = U.isNative() || /android/i.test(navigator.userAgent || '');
+    const accept = isAndroid
+      ? '.ofx,.qfx,.csv,.txt,.xls,.xlsx,.xlsm,.ods,.pdf,application/pdf,text/csv,text/comma-separated-values,text/plain,application/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroenabled.12,application/vnd.oasis.opendocument.spreadsheet,application/x-ofx,application/ofx,text/ofx,application/vnd.intu.qfx,application/octet-stream'
+      : '.ofx,.qfx,.csv,.txt,.xls,.xlsx,.xlsm,.ods,.pdf';
     return `<div class="grid g2">
       <div class="card">
         <label class="field" style="margin-bottom:14px"><span>Importar para a conta</span><select class="input" id="iacc">${UI.accountOptions(S.accountId)}</select></label>
         <div class="drop" id="drop">${icon('importar')}<p><b>Clique para escolher</b> ou arraste o arquivo do extrato aqui</p><p class="small">OFX/QFX • CSV/TXT • Excel (XLS, XLSX, ODS) • PDF</p>${S.busy ? '<p><b>Lendo arquivo…</b></p>' : ''}</div>
-        <input type="file" id="ifile" hidden>
+        <input type="file" id="ifile" accept="${accept}" hidden>
         <details style="margin-top:14px"><summary class="small" style="cursor:pointer">Ou colar o texto do extrato (copiado do internet banking ou de um PDF)</summary>
           <textarea class="input" id="ipaste" rows="7" style="margin-top:8px" placeholder="05/03/2026  PIX RECEBIDO FULANO   1.250,00&#10;06/03/2026  COMPRA CARTAO MERCADO   -235,90"></textarea>
           <div class="row" style="margin-top:8px"><label class="field" style="width:120px"><span>Ano (se faltar)</span><input class="input" type="number" id="iyear" value="${S.year}"></label><span class="spacer"></span><button class="btn" id="iparse">Interpretar texto</button></div>
