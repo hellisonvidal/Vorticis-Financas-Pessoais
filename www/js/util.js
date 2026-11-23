@@ -103,14 +103,18 @@ const U = (() => {
     if (input === null || input === undefined || input === '') return null;
     if (input instanceof Date) {
       if (isNaN(input)) return null;
-      // SheetJS cria datas em UTC à meia-noite local; arredonda para evitar fuso
-      const d = new Date(input.getTime() + 12 * 3600 * 1000);
-      return isoDate(new Date(d.getFullYear(), d.getMonth(), d.getDate()));
+      // Data pura em meia-noite UTC (ex.: new Date('2024-03-15')) mantém o dia UTC sem deslocar pelo fuso
+      if (input.getUTCHours() === 0 && input.getUTCMinutes() === 0 && input.getUTCSeconds() === 0 && input.getUTCMilliseconds() === 0) {
+        return valid(input.getUTCFullYear(), input.getUTCMonth() + 1, input.getUTCDate());
+      }
+      // SheetJS à meia-noite local pode ter desvio de segundos do fuso histórico de 1899 (ex.: 23:53:32)
+      const d = input.getHours() === 23 && input.getMinutes() >= 50 && input.getSeconds() > 0 ? new Date(input.getTime() + 15 * 60 * 1000) : input;
+      return valid(d.getFullYear(), d.getMonth() + 1, d.getDate());
     }
     if (typeof input === 'number') {
-      // número serial do Excel
+      // número serial do Excel (usa a parte inteira do dia para que horários como 22h não virem o dia seguinte)
       if (input > 20000 && input < 80000) {
-        const ms = Math.round((input - 25569) * 86400 * 1000);
+        const ms = Math.round((Math.floor(input) - 25569) * 86400 * 1000);
         const d = new Date(ms);
         return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
       }
@@ -118,8 +122,16 @@ const U = (() => {
     }
     const s = String(input).trim();
     let m;
-    // OFX: 20260131 ou 20260131120000[-3:BRT]
-    if ((m = s.match(/^(\d{4})(\d{2})(\d{2})(\d{6})?(\.\d+)?(\[.*\])?$/))) return valid(+m[1], +m[2], +m[3]);
+    // OFX: 20260131, 20260131120000[-3:BRT], 20260131220000 [-03:EST], 202601311200, 20260131120000.000[-3:BRT] etc.
+    // Extrai diretamente ano, mês e dia (YYYYMMDD) sem passar por new Date(), preservando a data original do lançamento sem conversão para UTC.
+    if ((m = s.match(/^(\d{4})(\d{2})(\d{2})(?:[T\s]?\d{2}(?::?\d{2}(?::?\d{2})?)?(?:[.,]\d{1,9})?)?(?:\s*(?:\[[^\]]*\]|Z|[+-]\d{1,2}(?::?\d{2})?(?:\s*[A-Z]{2,5})?|[A-Z]{2,5}))?$/i))) {
+      const d = valid(+m[1], +m[2], +m[3]);
+      if (d) return d;
+    }
+    if ((m = s.match(/^(\d{2})(\d{2})(\d{4})(?:[T\s]?\d{2}(?::?\d{2}(?::?\d{2})?)?(?:[.,]\d{1,9})?)?(?:\s*(?:\[[^\]]*\]|Z|[+-]\d{1,2}(?::?\d{2})?))?$/i))) {
+      const d = valid(+m[3], +m[2], +m[1]);
+      if (d) return d;
+    }
     if ((m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/))) return valid(+m[1], +m[2], +m[3]);
     if ((m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})\b/))) {
       let a = +m[1], b = +m[2], y = +m[3];
@@ -191,17 +203,33 @@ const U = (() => {
     setTimeout(() => URL.revokeObjectURL(url), 30000);
   }
 
-  /** Lê arquivo de texto detectando a codificação (UTF-8 ou Windows-1252, comum em bancos brasileiros) */
+  /** Lê os bytes de um File/Blob com fallback para FileReader (necessário em alguns provedores content:// do Android) */
+  function readBuffer(file) {
+    const viaReader = () => new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result);
+      r.onerror = () => rej(r.error || new Error('Não foi possível ler o arquivo.'));
+      r.readAsArrayBuffer(file);
+    });
+    if (file && typeof file.arrayBuffer === 'function') return file.arrayBuffer().catch(viaReader);
+    return viaReader();
+  }
+
+  /** Lê arquivo de texto detectando a codificação (UTF-8, Windows-1252/ISO-8859-1 ou UTF-16, comuns em bancos brasileiros) */
   async function readText(file) {
-    const buf = await file.arrayBuffer();
+    const buf = await readBuffer(file);
     return decodeText(buf);
   }
   function decodeText(buf) {
-    const bytes = new Uint8Array(buf);
-    const head = new TextDecoder('latin1').decode(bytes.slice(0, 400));
-    if (/CHARSET:\s*1252|encoding="?(windows-1252|iso-8859-1)/i.test(head)) return new TextDecoder('windows-1252').decode(bytes);
-    try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes).replace(/^﻿/, ''); }
-    catch (e) { return new TextDecoder('windows-1252').decode(bytes); }
+    const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+    if (bytes[0] === 0xFF && bytes[1] === 0xFE) return new TextDecoder('utf-16le').decode(bytes).replace(/^\uFEFF/, '').replace(/\0/g, '');
+    if (bytes[0] === 0xFE && bytes[1] === 0xFF) return new TextDecoder('utf-16be').decode(bytes).replace(/^\uFEFF/, '').replace(/\0/g, '');
+    try {
+      const utf8 = new TextDecoder('utf-8', { fatal: true }).decode(bytes).replace(/^\uFEFF/, '').replace(/\0/g, '');
+      if (!/[\u0080-\u009f]/.test(utf8)) return utf8;
+    } catch (e) { /* bytes inválidos em UTF-8: segue para Windows-1252 */ }
+    try { return new TextDecoder('windows-1252').decode(bytes).replace(/^\uFEFF/, '').replace(/\0/g, ''); }
+    catch (e) { return new TextDecoder('iso-8859-1').decode(bytes).replace(/^\uFEFF/, '').replace(/\0/g, ''); }
   }
 
   function fileStamp() { const d = new Date(); return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`; }
@@ -226,7 +254,7 @@ const U = (() => {
   return {
     money, num, toCents, uuid, today, nowISO, isoDate, fmtDate, fmtMonth, fmtMonthShort, MESES, MESES_ABR,
     parseISO, addMonths, addDays, monthOf, monthStart, monthEnd, addMonthYM, monthsBetween, daysInMonth,
-    parseMoney, parseDate, esc, norm, descKey, debounce, isNative, saveFile, readText, decodeText, fileStamp, sha256,
+    parseMoney, parseDate, esc, norm, descKey, debounce, isNative, saveFile, readBuffer, readText, decodeText, fileStamp, sha256,
     splitInstallments, pad,
   };
 })();
