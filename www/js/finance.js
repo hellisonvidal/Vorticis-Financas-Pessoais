@@ -46,7 +46,7 @@ const F = (() => {
   const txs = () => Store.all('transactions');
   const catName = (id) => (Store.get('categories', id) || {}).name || 'Sem categoria';
   const catColor = (id) => (Store.get('categories', id) || {}).color || '#94a3b8';
-  const accName = (id) => (Store.get('accounts', id) || {}).name || '(conta excluída)';
+  const accName = (id) => (id ? ((Store.get('accounts', id) || {}).name || '(conta excluída)') : 'Sem conta');
 
   /** Efeito (com sinal, em centavos) de um lançamento sobre uma conta */
   function effect(t, accId) {

@@ -121,7 +121,8 @@ Views.painel = {
     root.querySelectorAll('[data-acc]').forEach((li) => (li.onclick = () => App.go('conta', li.dataset.acc)));
     root.querySelectorAll('[data-pay]').forEach((b) => (b.onclick = async () => {
       const t = Store.get('transactions', b.dataset.pay);
-      await Store.upsert('transactions', { ...t, status: 'efetivada' });
+      const upd = await Store.upsert('transactions', { ...t, status: 'efetivada' });
+      if (t.debt_id) await Debts.onTxStatusChange(t, upd);
       UI.toast('Marcado como efetivado', 'ok');
     }));
     root.querySelectorAll('[data-tx]').forEach((li) => (li.onclick = () => Views.lancamentos.form(Store.get('transactions', li.dataset.tx))));

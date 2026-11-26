@@ -95,6 +95,7 @@ const App = (() => {
     applyTheme();
     await F.seedIfEmpty();
     await Debts.ensureCategory();
+    await Debts.syncExistingLoans();
     buildNav();
     await lockIfNeeded();
     window.addEventListener('hashchange', render);

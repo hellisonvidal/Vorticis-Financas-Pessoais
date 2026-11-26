@@ -47,7 +47,7 @@ const TxScreens = (() => {
   function bindList(root, accId, sel) {
     root.addEventListener('click', async (e) => {
       const tg = e.target.closest('[data-toggle]');
-      if (tg) { e.stopPropagation(); const t = Store.get('transactions', tg.dataset.toggle); await Store.upsert('transactions', { ...t, status: 'efetivada' }); UI.toast(t.type === 'receita' ? 'Marcado como recebido' : t.type === 'despesa' ? 'Marcado como pago' : 'Marcado como efetivado', 'ok'); return; }
+      if (tg) { e.stopPropagation(); const t = Store.get('transactions', tg.dataset.toggle); const upd = await Store.upsert('transactions', { ...t, status: 'efetivada' }); if (t.debt_id) await Debts.onTxStatusChange(t, upd); UI.toast(t.type === 'receita' ? 'Marcado como recebido' : t.type === 'despesa' ? 'Marcado como pago' : 'Marcado como efetivado', 'ok'); return; }
       if (e.target.matches('[data-sel]')) { e.stopPropagation(); return; }
       const li = e.target.closest('.tx[data-id]');
       if (li) form(Store.get('transactions', li.dataset.id), {}, accId);
@@ -204,10 +204,16 @@ const TxScreens = (() => {
     if (op === 'clear') { sel.clear(); return App.render(); }
     if (op === 'del') {
       if (!(await UI.confirm(`Excluir ${ids.length} lançamento(s)? Esta ação não pode ser desfeita.`, { ok: 'Excluir', danger: true }))) return;
-      await Store.removeMany('transactions', ids); sel.clear(); UI.toast('Lançamentos excluídos', 'ok'); return;
+      const debtIds = [...new Set(ids.map((id) => (Store.get('transactions', id) || {}).debt_id).filter(Boolean))];
+      await Store.removeMany('transactions', ids);
+      for (const dId of debtIds) await Debts.reconcileAfterTxRemove(dId);
+      sel.clear(); UI.toast('Lançamentos excluídos', 'ok'); return;
     }
     if (op === 'done' || op === 'pend') {
-      await Store.upsertMany('transactions', ids.map((id) => ({ ...Store.get('transactions', id), status: op === 'done' ? 'efetivada' : 'pendente' })));
+      const befores = ids.map((id) => Store.get('transactions', id));
+      const afters = befores.map((t) => ({ ...t, status: op === 'done' ? 'efetivada' : 'pendente' }));
+      await Store.upsertMany('transactions', afters);
+      for (let i = 0; i < befores.length; i++) if (befores[i].debt_id) await Debts.onTxStatusChange(befores[i], afters[i]);
       sel.clear(); UI.toast('Status atualizado', 'ok'); return;
     }
     if (op === 'cat') {
@@ -272,7 +278,7 @@ const TxScreens = (() => {
         <label class="field"><span>Valor (R$)</span><input class="input big" id="tv" inputmode="decimal" placeholder="0,00" value="${t.amount ? U.num(t.amount) : ''}" autocomplete="off"></label>
         <label class="field"><span>Data</span><input class="input" type="date" id="td" value="${t.date}" required></label>
         <label class="field full"><span>Descrição</span><input class="input" id="tds" list="tdl" value="${U.esc(t.description || '')}" placeholder="Ex.: Supermercado, Salário, Aluguel…" autocomplete="off"><datalist id="tdl">${descs.map((d) => `<option value="${U.esc(d)}">`).join('')}</datalist></label>
-        <div class="field"><span id="tal">${t.type === 'transferencia' ? 'Conta de origem' : 'Conta'}</span><select class="input" id="ta">${UI.accountOptions(t.account_id, { archived: !!(tx && Store.get('accounts', t.account_id) && Store.get('accounts', t.account_id).archived) })}</select>
+        <div class="field"><span id="tal">${t.type === 'transferencia' ? 'Conta de origem' : 'Conta'}</span><select class="input" id="ta">${!isNew && !t.account_id ? UI.opt('', '— Sem conta —', '') : ''}${UI.accountOptions(t.account_id || '', { archived: !!(tx && t.account_id && Store.get('accounts', t.account_id) && Store.get('accounts', t.account_id).archived) })}</select>
           <label class="check small" id="tew" style="margin-top:6px" title="Use quando um valor for devolvido: compra cancelada, cobrança indevida, estorno no cartão"><input type="checkbox" id="te" ${t.estorno ? 'checked' : ''}> <span id="tel">Estorno (valor devolvido nesta conta)</span></label></div>
         <label class="field" id="tcw"><span>Categoria</span><select class="input" id="tc"></select></label>
         <label class="field" id="ttw"><span>Conta de destino</span><select class="input" id="tto">${UI.accountOptions(t.to_account_id || '', {})}</select></label>
@@ -285,7 +291,7 @@ const TxScreens = (() => {
       <p class="err" id="terr"></p>`;
     const actions = [];
     if (!isNew) actions.push({ label: icon('trash') + 'Excluir', cls: 'danger', left: true, onClick: async () => !!(await removeTx(t)) });
-    if (!isNew) actions.push({ label: 'Duplicar', onClick: () => { const c = { ...t }; delete c.id; delete c.group_id; delete c.installment; delete c.installments; delete c.fitid; setTimeout(() => form(null, { ...c, date: U.today() }), 0); } });
+    if (!isNew) actions.push({ label: 'Duplicar', onClick: () => { const c = { ...t }; delete c.id; delete c.group_id; delete c.installment; delete c.installments; delete c.fitid; delete c.debt_id; delete c.debt_installment; setTimeout(() => form(null, { ...c, date: U.today() }), 0); } });
     actions.push({ label: 'Cancelar' });
     if (isNew) actions.push({ label: 'Salvar e novo', onClick: async (b) => { if (!(await save(b))) return false; setTimeout(() => form(null, { type: t.type, account_id: $('#ta', b).value, date: $('#td', b).value }), 0); } });
     actions.push({ label: 'Salvar', cls: 'primary', onClick: (b) => save(b) });
@@ -330,22 +336,26 @@ const TxScreens = (() => {
       const date = $('#td', b).value; if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return err('Informe a data.');
       const desc = $('#tds', b).value.trim(); if (!desc) return err('Informe uma descrição.');
       const rec = {
-        ...t, type: t.type, amount: Math.abs(amount), date, description: desc, account_id: $('#ta', b).value,
+        ...t, type: t.type, amount: Math.abs(amount), date, description: desc, account_id: $('#ta', b).value || null,
         category_id: t.type === 'transferencia' ? null : ($('#tc', b).value || null), to_account_id: t.type === 'transferencia' ? $('#tto', b).value : null,
         estorno: t.type !== 'transferencia' && $('#te', b).checked,
         status: $('#ts', b).checked ? 'efetivada' : 'pendente', notes: $('#tn', b).value.trim(), tags: $('#tg', b).value.split(',').map((x) => x.trim()).filter(Boolean),
       };
       // valor negativo digitado em receita/despesa: inverte o tipo
       if (amount < 0 && rec.type !== 'transferencia' && isNew) { rec.type = rec.type === 'receita' ? 'despesa' : 'receita'; rec.category_id = null; }
-      if (rec.type === 'transferencia' && (!rec.to_account_id || rec.to_account_id === rec.account_id)) return err('Escolha contas de origem e destino diferentes.');
+      if (rec.type === 'transferencia' && (!rec.account_id || !rec.to_account_id || rec.to_account_id === rec.account_id)) return err('Escolha contas de origem e destino diferentes.');
       try {
         if (isNew) {
           const rp = $('#tr', b) ? $('#tr', b).value : 'none'; const n = rp === 'none' ? 1 : parseInt($('#trc', b).value, 10);
           if (rp !== 'none' && !(n >= 2 && n <= 360)) return err('Quantidade deve estar entre 2 e 360.');
           const r = await F.createTransaction(rec, { repeat: rp, count: n });
           UI.toast(r.length > 1 ? `${r.length} lançamentos criados` : 'Lançamento salvo', 'ok');
-        } else { await Store.upsert('transactions', rec); UI.toast('Lançamento atualizado', 'ok'); }
-        await Store.setMeta('last_account', rec.account_id);
+        } else {
+          const saved = await Store.upsert('transactions', rec);
+          if (rec.debt_id && tx.status !== saved.status) await Debts.onTxStatusChange(tx, saved);
+          UI.toast('Lançamento atualizado', 'ok');
+        }
+        if (rec.account_id) await Store.setMeta('last_account', rec.account_id);
         return true;
       } catch (e) { return err(e.message); }
     }
@@ -358,10 +368,14 @@ const TxScreens = (() => {
         { v: 'one', label: 'Somente este' }, { v: 'next', label: 'Este e os próximos' }, { v: 'all', label: `Todos (${group.length})`, cls: 'danger' }], 'Excluir lançamento');
       if (!v) return false;
       const ids = v === 'one' ? [t.id] : v === 'next' ? group.filter((x) => x.date >= t.date).map((x) => x.id) : group.map((x) => x.id);
-      await Store.removeMany('transactions', ids); UI.toast(`${ids.length} lançamento(s) excluído(s)`, 'ok'); return true;
+      await Store.removeMany('transactions', ids);
+      if (t.debt_id) await Debts.reconcileAfterTxRemove(t.debt_id);
+      UI.toast(`${ids.length} lançamento(s) excluído(s)`, 'ok'); return true;
     }
     if (!(await UI.confirm('Excluir este lançamento?', { ok: 'Excluir', danger: true }))) return false;
-    await Store.remove('transactions', t.id); UI.toast('Lançamento excluído', 'ok'); return true;
+    await Store.remove('transactions', t.id);
+    if (t.debt_id) await Debts.reconcileAfterTxRemove(t.debt_id);
+    UI.toast('Lançamento excluído', 'ok'); return true;
   }
 
   return { screen, form, row, groupedList, bindList, signed, removeTx, NEW_TITLE };

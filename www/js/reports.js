@@ -357,11 +357,15 @@ const Reports = (() => {
       const tn = U.norm(r[I.type]);
       let type = /^rec|^cred|^entr/.test(tn) ? 'receita' : /^transf/.test(tn) ? 'transferencia' : /^desp|^deb|^sai/.test(tn) ? 'despesa' : null;
       if (!type && amount !== null) type = amount < 0 ? 'despesa' : 'receita';
-      const account_id = accId(r[I.acc]);
-      if (!date || amount === null || amount === 0 || !account_id) { errors.push(i + 1); continue; }
+      const isNoAcc = U.norm(r[I.acc]) === 'sem conta' || (!U.norm(r[I.acc]) && I.id >= 0 && /^debt:/.test(String(r[I.id] || '').trim()));
+      const account_id = isNoAcc ? null : accId(r[I.acc]);
+      if (!date || amount === null || amount === 0 || (!account_id && !isNoAcc) || (type === 'transferencia' && !account_id)) { errors.push(i + 1); continue; }
       amount = Math.abs(amount);
+      const id = (I.id >= 0 && String(r[I.id]).trim()) || U.uuid();
+      const prev = Store.get('transactions', id) || {};
       const rec = {
-        id: (I.id >= 0 && String(r[I.id]).trim()) || U.uuid(), date, description: String(r[I.desc] || '').trim() || 'Lançamento', type, amount, account_id,
+        ...prev,
+        id, date, description: String(r[I.desc] || '').trim() || 'Lançamento', type, amount, account_id,
         to_account_id: type === 'transferencia' ? accId(r[I.to]) : null, category_id: type === 'transferencia' ? null : catId(r[I.cat], type),
         status: /pend/.test(U.norm(r[I.st])) ? 'pendente' : 'efetivada', notes: I.notes >= 0 ? String(r[I.notes] || '') : '',
         tags: I.tags >= 0 ? String(r[I.tags] || '').split(',').map((x) => x.trim()).filter(Boolean) : [],

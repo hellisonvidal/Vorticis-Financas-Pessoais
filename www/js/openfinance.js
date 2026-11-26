@@ -296,8 +296,12 @@ const OpenFinance = (() => {
     const kind = l.kind === 'FINANCING' ? (/imob|habit/i.test(l.productName + ' ' + (l.type || '')) ? 'financiamento_imovel' : /veic|auto/i.test(l.productName + ' ' + (l.type || '')) ? 'financiamento_veiculo' : 'credito_pessoal')
       : l.kind === 'UNARRANGED_ACCOUNT_OVERDRAFT' ? 'cheque_especial' : /consig/i.test(l.productName + ' ' + (l.type || '')) ? 'consignado' : 'credito_pessoal';
     const remaining = inst.dueInstallments != null ? inst.dueInstallments : (inst.typeContractRemaining === 'MONTH' ? inst.contractRemainingNumber : null);
+    const total_installments = inst.totalNumberOfInstallments || null;
+    const contract_date = l.contractDate ? txDate(l.contractDate) : null;
     const due = l.dueDate ? txDate(l.dueDate) : null;
+    const due_day = due ? +due.slice(8, 10) : null;
     return { key: 'pluggy:' + l.id, name: l.productName || 'Empréstimo', creditor: bank, kind, balance: bal, rate, remaining: remaining || null,
+      total_installments, contract_date, due_day,
       installment: bal && remaining ? Math.round(bal / remaining) : 0, late: (inst.pastDueInstallments || 0) > 0, contract: l.contractNumber || '', due };
   }
   async function saveLoans(list) {
@@ -305,10 +309,15 @@ const OpenFinance = (() => {
     const recs = list.map((d) => {
       const old = existing.find((x) => x.src_key === d.key);
       return { ...(old || { id: U.uuid(), color: '#be123c' }), name: d.name, creditor: d.creditor, kind: d.kind, balance: d.balance || 0, rate: d.rate || (old && old.rate) || 0,
-        remaining: d.remaining, installment: d.installmentEdited ?? (old && old.installment) ?? d.installment, status: d.balance === 0 ? 'quitada' : d.late ? 'atrasada' : (old && old.status === 'negociando' ? 'negociando' : 'em_dia'),
+        remaining: d.remaining, total_installments: d.total_installments || (old && old.total_installments) || null,
+        contract_date: d.contract_date || (old && old.contract_date) || null, due_day: d.due_day || (old && old.due_day) || null,
+        installment: d.installmentEdited ?? (old && old.installment) ?? d.installment, status: d.balance === 0 ? 'quitada' : d.late ? 'atrasada' : (old && old.status === 'negociando' ? 'negociando' : 'em_dia'),
         overdue: old && old.overdue ? old.overdue : 0, source: 'openfinance', src_key: d.key, balance_date: U.today(), notes: d.contract ? 'Contrato ' + d.contract : (old && old.notes) || '' };
     });
-    if (recs.length) await Store.upsertMany('debts', recs);
+    if (recs.length) {
+      await Store.upsertMany('debts', recs);
+      for (const rec of recs) if (rec.installment > 0) await Debts.syncExpenses(rec);
+    }
     return recs.length;
   }
 
