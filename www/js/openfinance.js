@@ -311,6 +311,7 @@ const OpenFinance = (() => {
       return { ...(old || { id: U.uuid(), color: '#be123c' }), name: d.name, creditor: d.creditor, kind: d.kind, balance: d.balance || 0, rate: d.rate || (old && old.rate) || 0,
         remaining: d.remaining, total_installments: d.total_installments || (old && old.total_installments) || null,
         contract_date: d.contract_date || (old && old.contract_date) || null, due_day: d.due_day || (old && old.due_day) || null,
+        paid_until_next: old && old.paid_until_next !== undefined ? old.paid_until_next : !d.late,
         installment: d.installmentEdited ?? (old && old.installment) ?? d.installment, status: d.balance === 0 ? 'quitada' : d.late ? 'atrasada' : (old && old.status === 'negociando' ? 'negociando' : 'em_dia'),
         overdue: old && old.overdue ? old.overdue : 0, source: 'openfinance', src_key: d.key, balance_date: U.today(), notes: d.contract ? 'Contrato ' + d.contract : (old && old.notes) || '' };
     });

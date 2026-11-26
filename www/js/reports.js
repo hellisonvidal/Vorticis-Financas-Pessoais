@@ -10,10 +10,9 @@ const Reports = (() => {
     matriz: { name: 'Categorias × meses (comparativo)', needs: ['period', 'account'] },
     extrato: { name: 'Extrato de conta', needs: ['period', 'accountRequired'] },
     lancamentos: { name: 'Lançamentos detalhados', needs: ['period', 'account'] },
-    orcamento: { name: 'Orçamento × realizado', needs: ['month'] },
     saldos: { name: 'Saldos das contas', needs: ['date'] },
     cartao: { name: 'Faturas de cartão', needs: ['cardRequired'] },
-    dividas: { name: 'Endividamento e plano de quitação', needs: [] },
+    dividas: { name: 'Endividamento', needs: [] },
   };
   const M = 'money', D = 'date', P = 'pct';
   const col = (label, type, align) => ({ label, type, align: align || (type === M || type === P ? 'right' : 'left') });
@@ -106,14 +105,6 @@ const Reports = (() => {
       R.sections.push({ kind: 'kpis', items: [{ label: 'Lançamentos', text: String(list.length) }, { label: 'Receitas', value: rec, cls: 'pos' }, { label: 'Despesas', value: desp, cls: 'neg' }, { label: 'Resultado', value: rec - desp, cls: rec - desp >= 0 ? 'pos' : 'neg' }] });
       R.sections.push({ kind: 'table', title: 'Lançamentos', columns: [col('Data', D), col('Descrição'), col('Tipo'), col('Categoria'), col('Conta'), col('Valor', M), col('Status')], rows });
       R.orientation = 'landscape';
-    }
-
-    if (type === 'orcamento') {
-      const b = F.budgetStatus(p.month);
-      R.subtitle = U.fmtMonth(p.month);
-      const to = b.reduce((s, x) => s + x.amount, 0), tr = b.reduce((s, x) => s + x.spent, 0);
-      R.sections.push({ kind: 'kpis', items: [{ label: 'Orçado', value: to }, { label: 'Realizado', value: tr, cls: tr > to ? 'neg' : '' }, { label: 'Disponível', value: to - tr, cls: to - tr >= 0 ? 'pos' : 'neg' }] });
-      R.sections.push({ kind: 'table', title: 'Por categoria', columns: [col('Categoria'), col('Orçado', M), col('Realizado', M), col('Diferença', M), col('% usado', P)], rows: b.map((x) => [x.name, x.amount, x.spent, x.amount - x.spent, pct(x.spent, x.amount)]), foot: ['Total', to, tr, to - tr, pct(tr, to)] });
     }
 
     if (type === 'saldos') {
@@ -309,8 +300,6 @@ const Reports = (() => {
     wa['!cols'] = [{ wch: 24 }, { wch: 18 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 10 }];
     XLSX.utils.book_append_sheet(wb, wa, 'Contas');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Categoria', 'Tipo', 'Cor'], ...F.categories().map((c) => [c.name, c.type, c.color])]), 'Categorias');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Categoria', 'Mês (vazio = todo mês)', 'Limite'], ...Store.all('budgets').map((b) => [F.catName(b.category_id), b.month || '', b.amount / 100])]), 'Orçamentos');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Meta', 'Valor alvo', 'Valor atual', 'Prazo'], ...Store.all('goals').map((g) => [g.name, g.target / 100, g.saved / 100, g.deadline ? U.fmtDate(g.deadline) : ''])]), 'Metas');
     const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
     return U.saveFile(`financas-completo-${U.fileStamp()}.xlsx`, new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
   }

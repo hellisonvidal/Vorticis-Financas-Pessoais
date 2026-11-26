@@ -110,56 +110,64 @@ const Debts = (() => {
   }
 
   /**
-   * Calcula o cronograma de vencimentos de um empréstimo/financiamento.
-   * Quando há data de contratação e total de parcelas, a 1ª parcela vence no mês seguinte à contratação
+   * Calcula todas as parcelas (1..N) do contrato desde a data de contratação.
+   * Quando há data de contratação, a 1ª parcela vence no mês seguinte à contratação
    * (no dia de vencimento informado, ou no mesmo dia da contratação).
+   * Com paid_until_next ativo, as parcelas anteriores ao próximo vencimento (date < today)
+   * ficam quitadas (efetivadas) e as demais ficam em aberto (pendentes).
    */
-  function calcSchedule(debt, { paidNums = new Set(), today = U.today() } = {}) {
-    if (!debt) return { items: [], total: 0, remaining: 0, firstDate: null, lastDate: null, endDate: null };
-    const total = debt.total_installments > 0 ? Math.min(MAX_PARC, parseInt(debt.total_installments, 10)) : 0;
+  function calcSchedule(debt, { today = U.today() } = {}) {
+    if (!debt) return { items: [], total: 0, remaining: 0, paidCount: 0, firstDate: null, lastDate: null, nextDate: null, nextNumber: null, endDate: null };
+    const totalInput = debt.total_installments > 0 ? Math.min(MAX_PARC, parseInt(debt.total_installments, 10)) : 0;
     const hasRem = debt.remaining !== null && debt.remaining !== undefined && debt.remaining !== '';
     const remInput = hasRem ? Math.max(0, Math.min(MAX_PARC, parseInt(debt.remaining, 10))) : null;
-    const hasContract = /^\d{4}-\d{2}-\d{2}$/.test(debt.contract_date || '');
+    const N = totalInput || (remInput || 0);
+    if (N <= 0) return { items: [], total: 0, remaining: 0, paidCount: 0, firstDate: null, lastDate: null, nextDate: null, nextNumber: null, endDate: null };
 
+    const hasContract = /^\d{4}-\d{2}-\d{2}$/.test(debt.contract_date || '');
+    let firstYM, day;
     if (hasContract) {
-      const N = total || (remInput || 0);
-      if (N <= 0) return { items: [], total: 0, remaining: 0, firstDate: null, lastDate: null, endDate: null };
-      const day = debt.due_day || +debt.contract_date.slice(8, 10);
-      const baseYM = U.monthOf(debt.contract_date);
-      const all = Array.from({ length: N }, (_, idx) => {
-        const number = idx + 1;
-        return { number, total: N, date: dateForYM(U.addMonthYM(baseYM, number), day) };
-      });
-      const endDate = all[all.length - 1].date;
-      if (debt.status === 'quitada') return { items: [], total: N, remaining: 0, firstDate: null, lastDate: null, endDate };
-      const unpaid = all.filter((x) => !paidNums.has(x.number));
-      let items;
-      if (remInput !== null) items = remInput > 0 ? unpaid.slice(-Math.min(remInput, unpaid.length)) : [];
-      else {
-        const curStart = U.monthStart(U.monthOf(today));
-        items = unpaid.filter((x) => x.date >= curStart);
-      }
-      return {
-        items, total: N, remaining: items.length,
-        firstDate: items[0] ? items[0].date : null,
-        lastDate: items.length ? items[items.length - 1].date : null,
-        endDate,
-      };
+      day = debt.due_day || +debt.contract_date.slice(8, 10);
+      firstYM = U.addMonthYM(U.monthOf(debt.contract_date), 1);
+    } else {
+      day = debt.due_day || (debt.balance_date ? +debt.balance_date.slice(8, 10) : +today.slice(8, 10));
+      const curYM = U.monthOf(today);
+      const thisMonthDate = dateForYM(curYM, day);
+      const nextYM = debt.status === 'atrasada' || thisMonthDate >= today ? curYM : U.addMonthYM(curYM, 1);
+      const rem = remInput !== null ? Math.min(N, remInput) : N;
+      const paidBefore = Math.max(0, N - rem);
+      firstYM = U.addMonthYM(nextYM, -paidBefore);
     }
 
-    const rem = remInput !== null ? remInput : total;
-    const N = Math.max(total, rem);
-    if (debt.status === 'quitada' || rem <= 0) return { items: [], total: N, remaining: 0, firstDate: null, lastDate: null, endDate: null };
-    const day = debt.due_day || (debt.balance_date ? +debt.balance_date.slice(8, 10) : +today.slice(8, 10));
-    const curYM = U.monthOf(today);
-    const thisMonthDate = dateForYM(curYM, day);
-    const startYM = debt.status === 'atrasada' || thisMonthDate >= today ? curYM : U.addMonthYM(curYM, 1);
-    const unpaidNums = [];
-    for (let k = 1; k <= N; k++) if (!paidNums.has(k)) unpaidNums.push(k);
-    const nums = unpaidNums.slice(-Math.min(rem, unpaidNums.length));
-    const items = nums.map((number, idx) => ({ number, total: N, date: dateForYM(U.addMonthYM(startYM, idx), day) }));
-    const endDate = items.length ? items[items.length - 1].date : null;
-    return { items, total: N, remaining: items.length, firstDate: items[0] ? items[0].date : null, lastDate: endDate, endDate };
+    const paidUntilNext = !!debt.paid_until_next;
+    const isQuitada = debt.status === 'quitada';
+    const fixedPaidCount = !isQuitada && !paidUntilNext && remInput !== null ? Math.max(0, N - Math.min(N, remInput)) : 0;
+
+    const items = Array.from({ length: N }, (_, idx) => {
+      const number = idx + 1;
+      const date = dateForYM(U.addMonthYM(firstYM, idx), day);
+      let status = 'pendente';
+      if (isQuitada) status = 'efetivada';
+      else if (paidUntilNext && date < today) status = 'efetivada';
+      else if (!paidUntilNext && number <= fixedPaidCount) status = 'efetivada';
+      return { number, total: N, date, status };
+    });
+
+    const openItems = items.filter((x) => x.status === 'pendente');
+    const nextItem = openItems.find((x) => x.date >= today) || openItems[0] || null;
+    const firstDate = items[0].date;
+    const endDate = items[items.length - 1].date;
+    return {
+      items,
+      total: N,
+      remaining: openItems.length,
+      paidCount: items.length - openItems.length,
+      firstDate,
+      lastDate: endDate,
+      nextDate: nextItem ? nextItem.date : null,
+      nextNumber: nextItem ? nextItem.number : null,
+      endDate,
+    };
   }
 
   /** Data prevista da última parcela do contrato */
@@ -170,55 +178,110 @@ const Debts = (() => {
       const day = debt.due_day || +debt.contract_date.slice(8, 10);
       return dateForYM(U.addMonthYM(U.monthOf(debt.contract_date), n), day);
     }
-    const pend = pendingInstallments(debt.id);
-    if (pend.length) return pend[pend.length - 1].date;
+    const all = installmentsOf(debt.id);
+    if (all.length) return all[all.length - 1].date;
     if (debt.remaining > 0) return dateForYM(U.addMonthYM(U.monthOf(today), debt.remaining), debt.due_day || 1);
     return null;
   }
 
+  const installmentsOf = (id) => F.txs().filter((t) => t.debt_id === id)
+    .sort((a, b) => (a.debt_installment || 1e9) - (b.debt_installment || 1e9) || a.date.localeCompare(b.date));
   const payments = (id) => F.txs().filter((t) => t.debt_id === id).sort((a, b) => b.date.localeCompare(a.date));
-  const paidPayments = (id) => F.txs().filter((t) => t.debt_id === id && t.status !== 'pendente').sort((a, b) => b.date.localeCompare(a.date));
+  const paidPayments = (id) => F.txs().filter((t) => t.debt_id === id && t.status !== 'pendente')
+    .sort((a, b) => (a.debt_installment || 0) - (b.debt_installment || 0) || a.date.localeCompare(b.date));
   const pendingInstallments = (id) => F.txs().filter((t) => t.debt_id === id && t.status === 'pendente')
     .sort((a, b) => a.date.localeCompare(b.date) || (a.debt_installment || 0) - (b.debt_installment || 0));
 
   /**
-   * Gera ou atualiza em Despesas os vencimentos mensais (pendentes) de um empréstimo/financiamento.
-   * Usa IDs determinísticos (debt:<id>:p<n>) para evitar duplicidade entre aparelhos sincronizados
-   * e nunca altera nem apaga parcelas já pagas (efetivadas).
+   * Gera ou atualiza em Despesas todas as parcelas (1..N) do empréstimo/financiamento desde a contratação.
+   * Usa IDs determinísticos (debt:<id>:p<n>) para evitar duplicidade entre aparelhos sincronizados,
+   * preserva pagamentos já realizados e, quando paid_until_next está ativo, quita parcelas anteriores ao próximo vencimento.
    */
-  async function syncExpenses(debt, { today = U.today() } = {}) {
-    if (!debt || !debt.id) return { created: 0, updated: 0, removed: 0, total: 0 };
+  async function syncExpenses(debt, { today = U.today(), forceSettleUntilNext = false, preserveDeleted = false } = {}) {
+    if (!debt || !debt.id) return { created: 0, updated: 0, removed: 0, total: 0, open: 0, paid: 0 };
     await ensureCategory();
-    const existingActive = F.txs().filter((t) => t.debt_id === debt.id && t.debt_installment > 0);
-    const paidNums = new Set(existingActive.filter((t) => t.status !== 'pendente').map((t) => t.debt_installment));
-    const pendingByNum = new Map();
-    existingActive.filter((t) => t.status === 'pendente').forEach((t) => pendingByNum.set(t.debt_installment, t));
+    const allInclDeleted = Store.all('transactions', true).filter((t) => t.debt_id === debt.id && t.debt_installment > 0);
+    const deletedIds = new Set(allInclDeleted.filter((t) => t._deleted).map((t) => t.id));
+    const existingActive = allInclDeleted.filter((t) => !t._deleted);
+    const byNum = new Map(existingActive.map((t) => [t.debt_installment, t]));
+    const prevOpenTxs = existingActive.filter((t) => t.status === 'pendente');
 
-    if (debt.sync_expenses === false || debt.status === 'quitada' || !(debt.installment > 0)) {
-      const toRemove = [...pendingByNum.values()].map((t) => t.id);
+    if (debt.sync_expenses === false || !(debt.installment > 0)) {
+      const toRemove = prevOpenTxs.map((t) => t.id);
       if (toRemove.length) await Store.removeMany('transactions', toRemove);
-      return { created: 0, updated: 0, removed: toRemove.length, total: 0 };
+      const paidLeft = existingActive.length - toRemove.length;
+      return { created: 0, updated: 0, removed: toRemove.length, total: paidLeft, open: 0, paid: paidLeft };
     }
 
-    const sched = calcSchedule(debt, { paidNums, today });
+    const sched = calcSchedule(debt, { today });
+    if (!sched.items.length) {
+      const toRemove = prevOpenTxs.map((t) => t.id);
+      if (toRemove.length) await Store.removeMany('transactions', toRemove);
+      return { created: 0, updated: 0, removed: toRemove.length, total: 0, open: 0, paid: 0 };
+    }
+
     const desiredNums = new Set();
     const toUpsert = [];
-    let created = 0, updated = 0;
+    let created = 0, updated = 0, settledExistingCount = 0, settledExistingSum = 0;
 
     for (const it of sched.items) {
-      if (paidNums.has(it.number)) continue;
       desiredNums.add(it.number);
       const id = `debt:${debt.id}:p${it.number}`;
+      const cur = byNum.get(it.number);
+      if (!cur && preserveDeleted && deletedIds.has(id)) continue;
       const description = it.total > 1 ? `${debt.name} (${it.number}/${it.total})` : debt.name;
       const accId = debt.account_id || null;
-      const cur = pendingByNum.get(it.number);
-      if (cur && cur.id === id && cur.date === it.date && cur.amount === debt.installment && cur.description === description
-        && (cur.account_id || null) === accId && cur.category_id === CAT && cur.installment === it.number && cur.installments === it.total) {
+
+      if (cur && cur.status !== 'pendente') {
+        if (cur.installments !== it.total || cur.installment !== it.number) {
+          updated++;
+          toUpsert.push({ ...cur, description, installment: it.number, installments: it.total });
+        }
         continue;
       }
-      if (cur) updated++; else created++;
+
+      if (cur) {
+        let nextStatus = 'pendente';
+        if (debt.status === 'quitada') nextStatus = 'efetivada';
+        else if (forceSettleUntilNext && it.date < today) nextStatus = 'efetivada';
+        else if (debt.paid_until_next && it.date < today && !cur.manual_open) nextStatus = 'efetivada';
+
+        if (nextStatus !== 'pendente') {
+          settledExistingCount++;
+          settledExistingSum += debt.installment;
+        }
+        if (cur.id === id && cur.date === it.date && cur.amount === debt.installment && cur.description === description
+          && (cur.account_id || null) === accId && cur.category_id === CAT && cur.status === nextStatus
+          && cur.installment === it.number && cur.installments === it.total) {
+          continue;
+        }
+        updated++;
+        const nextRec = {
+          ...cur,
+          id,
+          type: 'despesa',
+          account_id: accId,
+          to_account_id: null,
+          category_id: CAT,
+          date: it.date,
+          amount: debt.installment,
+          description,
+          status: nextStatus,
+          debt_id: debt.id,
+          debt_installment: it.number,
+          group_id: 'debt:' + debt.id,
+          installment: it.number,
+          installments: it.total,
+          repeat: 'parcelas',
+        };
+        if (nextStatus !== 'pendente') delete nextRec.manual_open;
+        toUpsert.push(nextRec);
+        continue;
+      }
+
+      created++;
+      const initStatus = (forceSettleUntilNext && it.date < today) ? 'efetivada' : it.status;
       toUpsert.push({
-        ...(cur || {}),
         id,
         type: 'despesa',
         account_id: accId,
@@ -227,7 +290,7 @@ const Debts = (() => {
         date: it.date,
         amount: debt.installment,
         description,
-        status: 'pendente',
+        status: initStatus,
         debt_id: debt.id,
         debt_installment: it.number,
         group_id: 'debt:' + debt.id,
@@ -238,21 +301,78 @@ const Debts = (() => {
       });
     }
 
-    const toRemove = [...pendingByNum.entries()].filter(([num]) => !desiredNums.has(num)).map(([, t]) => t.id);
+    const toRemove = [...byNum.entries()].filter(([num, t]) => !desiredNums.has(num) && t.status === 'pendente').map(([, t]) => t.id);
     if (toRemove.length) await Store.removeMany('transactions', toRemove);
     if (toUpsert.length) await Store.upsertMany('transactions', toUpsert);
-    return { created, updated, removed: toRemove.length, total: sched.items.length };
+
+    const finalOpen = pendingInstallments(debt.id).filter((t) => t.debt_installment > 0);
+    const finalPaid = paidPayments(debt.id).filter((t) => t.debt_installment > 0);
+    const nextRem = finalOpen.length;
+    let nextBal = debt.balance || 0;
+    let nextStatus = debt.status;
+    let nextOverdue = debt.overdue || 0;
+
+    if (settledExistingCount > 0 && prevOpenTxs.length > 0) {
+      if (nextRem === 0) {
+        nextBal = 0; nextStatus = 'quitada'; nextOverdue = 0;
+      } else if (nextBal <= debt.installment * prevOpenTxs.length) {
+        nextBal = Math.max(0, Math.round(nextBal * (nextRem / prevOpenTxs.length)));
+      } else {
+        nextBal = Math.max(0, nextBal - settledExistingSum);
+      }
+    }
+    if (debt.paid_until_next || forceSettleUntilNext) {
+      if (!finalOpen.some((t) => t.date < today)) {
+        nextOverdue = 0;
+        if (nextStatus === 'atrasada') nextStatus = nextRem === 0 ? 'quitada' : 'em_dia';
+      }
+    }
+    if (nextRem === 0 && finalPaid.length > 0) {
+      nextBal = 0; nextStatus = 'quitada'; nextOverdue = 0;
+    } else if (nextRem > 0 && nextStatus === 'quitada') {
+      nextStatus = 'em_dia';
+    }
+    if (nextRem !== debt.remaining || nextBal !== debt.balance || nextStatus !== debt.status || nextOverdue !== (debt.overdue || 0)) {
+      await Store.upsert('debts', { ...debt, remaining: nextRem, balance: nextBal, status: nextStatus, overdue: nextOverdue });
+    }
+    return { created, updated, removed: toRemove.length, total: finalOpen.length + finalPaid.length, open: finalOpen.length, paid: finalPaid.length };
   }
 
-  /** Ao abrir o app, gera despesas mensais para empréstimos/financiamentos ativos ainda sem parcelas lançadas */
-  async function syncExistingLoans() {
+  /** Ativa a opção de deixar a dívida quitada até o movimento da próxima parcela e quita as anteriores */
+  async function settleUntilNext(debt, { today = U.today() } = {}) {
+    if (!debt || !debt.id) return null;
+    const saved = await Store.upsert('debts', { ...debt, paid_until_next: true, overdue: 0, status: debt.status === 'atrasada' ? 'em_dia' : debt.status });
+    await syncExpenses(saved, { today, forceSettleUntilNext: true });
+    return Store.get('debts', saved.id);
+  }
+
+  /** Alterna uma parcela específica entre paga (efetivada) e em aberto (pendente) */
+  async function toggleInstallment(txId) {
+    const t = Store.get('transactions', txId);
+    if (!t) return null;
+    const toPaid = t.status === 'pendente';
+    const next = { ...t, status: toPaid ? 'efetivada' : 'pendente' };
+    if (toPaid) delete next.manual_open; else next.manual_open = true;
+    const saved = await Store.upsert('transactions', next);
+    if (t.debt_id) await onTxStatusChange(t, saved);
+    return saved;
+  }
+
+  /** Ao abrir o app, gera todas as parcelas desde a contratação e quita vencimentos já passados quando configurado */
+  async function syncExistingLoans({ today = U.today() } = {}) {
     const allTxInclDeleted = Store.all('transactions', true);
-    const syncedDebtIds = new Set(allTxInclDeleted.filter((t) => t.debt_id && t.debt_installment > 0).map((t) => t.debt_id));
     for (const d of Store.all('debts')) {
-      if (d.status === 'quitada' || d.sync_expenses === false) continue;
+      if (d.sync_expenses === false) continue;
       if (!(d.installment > 0) || !(d.total_installments > 0 || d.remaining > 0)) continue;
-      if (syncedDebtIds.has(d.id)) continue;
-      await syncExpenses(d);
+      const myTxs = allTxInclDeleted.filter((t) => t.debt_id === d.id && t.debt_installment > 0);
+      const activeTxs = myTxs.filter((t) => !t._deleted);
+      const expectedTotal = d.total_installments > 0 ? parseInt(d.total_installments, 10) : 0;
+      const needsBackfill = myTxs.length === 0 || (expectedTotal > 0 && myTxs.length < expectedTotal);
+      const needsAutoSettle = !!d.paid_until_next && activeTxs.some((t) => t.status === 'pendente' && !t.manual_open && t.date < today);
+      if (d.status === 'quitada' && !needsBackfill) continue;
+      if (needsBackfill || needsAutoSettle) {
+        await syncExpenses(d, { today, preserveDeleted: true });
+      }
     }
   }
 
@@ -262,22 +382,30 @@ const Debts = (() => {
     const debt = Store.get('debts', afterTx.debt_id);
     if (!debt) return null;
     const hasSched = F.txs().some((t) => t.debt_id === debt.id && t.debt_installment > 0);
-    const pend = pendingInstallments(debt.id);
+    const pend = pendingInstallments(debt.id).filter((t) => !hasSched || t.debt_installment > 0);
     if (beforeTx.status === 'pendente' && afterTx.status !== 'pendente') {
+      if (afterTx.manual_open) { const clean = { ...afterTx }; delete clean.manual_open; await Store.upsert('transactions', clean); }
       const nextRem = hasSched ? pend.length : (debt.remaining > 0 ? debt.remaining - 1 : debt.remaining);
-      const finished = hasSched && pend.length === 0;
-      const bal = finished ? 0 : Math.max(0, (debt.balance || 0) - afterTx.amount);
+      const prevOpen = pend.length + 1;
+      const finished = hasSched ? pend.length === 0 : false;
+      let bal;
+      if (finished) bal = 0;
+      else if (hasSched && (debt.balance || 0) < (debt.installment || afterTx.amount) * prevOpen) bal = Math.max(0, Math.round((debt.balance || 0) * (pend.length / prevOpen)));
+      else bal = Math.max(0, (debt.balance || 0) - afterTx.amount);
       const upd = { ...debt, balance: bal, balance_date: afterTx.date, remaining: nextRem };
-      if (bal === 0 || finished) upd.status = 'quitada';
+      if (finished || (!hasSched && bal === 0)) upd.status = 'quitada';
       else if (upd.status === 'atrasada' && (debt.overdue || 0) <= afterTx.amount) { upd.status = 'em_dia'; upd.overdue = 0; }
       else if (debt.overdue) upd.overdue = Math.max(0, debt.overdue - afterTx.amount);
-      const saved = await Store.upsert('debts', upd);
-      if (saved.status === 'quitada' && pend.length) await Store.removeMany('transactions', pend.filter((t) => t.debt_installment > 0).map((t) => t.id));
-      return saved;
+      return Store.upsert('debts', upd);
     }
     if (beforeTx.status !== 'pendente' && afterTx.status === 'pendente') {
+      if (!afterTx.manual_open && afterTx.date < U.today()) await Store.upsert('transactions', { ...afterTx, manual_open: true });
       const nextRem = hasSched ? pend.length : ((debt.remaining || 0) + 1);
-      const upd = { ...debt, balance: (debt.balance || 0) + afterTx.amount, remaining: nextRem };
+      const prevOpen = Math.max(0, pend.length - 1);
+      let bal;
+      if (hasSched && prevOpen > 0 && (debt.balance || 0) < (debt.installment || afterTx.amount) * prevOpen) bal = Math.round((debt.balance || 0) * (pend.length / prevOpen));
+      else bal = (debt.balance || 0) + afterTx.amount;
+      const upd = { ...debt, balance: bal, remaining: nextRem };
       if (upd.status === 'quitada') upd.status = 'em_dia';
       return Store.upsert('debts', upd);
     }
@@ -310,25 +438,28 @@ const Debts = (() => {
     await ensureCategory();
     const nextPend = pendingInstallments(debt.id).find((t) => t.debt_installment > 0);
     if (nextPend) {
-      await Store.upsert('transactions', { ...nextPend, account_id, date, amount, status, category_id: CAT });
+      const clean = { ...nextPend, account_id, date, amount, status, category_id: CAT };
+      delete clean.manual_open;
+      await Store.upsert('transactions', clean);
     } else {
       await Store.upsert('transactions', { id: U.uuid(), account_id, date, type: 'despesa', amount, category_id: CAT, description: 'Pagamento: ' + debt.name, status, debt_id: debt.id });
     }
     if (status === 'pendente') return debt;
     const remainingPend = pendingInstallments(debt.id).filter((t) => t.debt_installment > 0);
+    const prevOpen = remainingPend.length + 1;
     const finished = !!nextPend && remainingPend.length === 0;
-    const bal = finished ? 0 : Math.max(0, (debt.balance || 0) - (principal ?? amount));
+    let bal;
+    if (finished) bal = 0;
+    else if (principal !== undefined && principal !== null) bal = Math.max(0, (debt.balance || 0) - principal);
+    else if (nextPend && (debt.balance || 0) < (debt.installment || amount) * prevOpen) bal = Math.max(0, Math.round((debt.balance || 0) * (remainingPend.length / prevOpen)));
+    else bal = Math.max(0, (debt.balance || 0) - amount);
     const upd = { ...debt, balance: bal, balance_date: date };
     if (nextPend) upd.remaining = remainingPend.length;
     else if (debt.remaining > 0) upd.remaining = debt.remaining - 1;
-    if (bal === 0 || finished) upd.status = 'quitada';
+    if (finished || (!nextPend && bal === 0)) upd.status = 'quitada';
     else if (upd.status === 'atrasada' && (debt.overdue || 0) <= amount) { upd.status = 'em_dia'; upd.overdue = 0; }
     else if (debt.overdue) upd.overdue = Math.max(0, debt.overdue - amount);
-    const saved = await Store.upsert('debts', upd);
-    if (saved.status === 'quitada' && remainingPend.length) {
-      await Store.removeMany('transactions', remainingPend.map((t) => t.id));
-    }
-    return saved;
+    return Store.upsert('debts', upd);
   }
 
   // ---------- leitura do relatório do Registrato (SCR) ----------
@@ -399,8 +530,8 @@ const Debts = (() => {
 
   return {
     KINDS, LOAN_KINDS, isLoan, STATUS, SOURCES, OFFICIAL, CAT, ensureCategory, list, cardDebts, overview, avgIncome, minPayment, simulate,
-    dateForYM, calcSchedule, endDate, syncExpenses, syncExistingLoans, onTxStatusChange, reconcileAfterTxRemove, remove,
-    pay, payments, paidPayments, pendingInstallments, parseSCR, saveSCR, kindOf,
+    dateForYM, calcSchedule, endDate, syncExpenses, settleUntilNext, toggleInstallment, syncExistingLoans, onTxStatusChange, reconcileAfterTxRemove, remove,
+    pay, installmentsOf, payments, paidPayments, pendingInstallments, parseSCR, saveSCR, kindOf,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Debts;

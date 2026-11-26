@@ -113,10 +113,10 @@ Views.dividas = (() => {
   }
 
   const intOrNull = (v) => (String(v || '').trim() ? parseInt(String(v).trim(), 10) : null);
-  const paidNumsOf = (id) => new Set(id ? Debts.paidPayments(id).filter((t) => t.debt_installment > 0).map((t) => t.debt_installment) : []);
 
   function form(debt = null, defaults = {}) {
-    const d = debt ? { ...debt } : { kind: 'credito_pessoal', status: 'em_dia', source: 'manual', balance: 0, rate: 0, installment: 0, balance_date: U.today(), ...defaults };
+    const d = debt ? { ...debt } : { kind: 'credito_pessoal', status: 'em_dia', source: 'manual', balance: 0, rate: 0, installment: 0, balance_date: U.today(), paid_until_next: true, ...defaults };
+    if (!debt && d.status === 'atrasada' && defaults.paid_until_next === undefined) d.paid_until_next = false;
     const isNew = !debt;
     UI.modal({
       title: isNew ? 'Nova dívida' : 'Editar dívida',
@@ -128,37 +128,42 @@ Views.dividas = (() => {
         <label class="field"><span>Total de parcelas do contrato</span><input class="input" id="dtot" inputmode="numeric" value="${d.total_installments || ''}" placeholder="Ex.: 48"></label>
         <label class="field"><span>Parcela mensal (R$)</span><input class="input" id="di" inputmode="decimal" value="${d.installment ? U.num(d.installment) : ''}" placeholder="0,00"></label>
         <label class="field"><span>Dia de vencimento</span><input class="input" id="ddue" inputmode="numeric" value="${d.due_day || ''}" placeholder="1 a 31 (ou dia da contratação)"></label>
-        <label class="field"><span>Parcelas restantes</span><input class="input" id="drem" inputmode="numeric" value="${d.remaining ?? ''}" placeholder="—"></label>
-        <label class="field"><span>Saldo devedor atual (R$)</span><input class="input" id="db" inputmode="decimal" value="${d.balance ? U.num(d.balance) : ''}" placeholder="parcela × restantes"></label>
+        <label class="field"><span>Parcelas em aberto (restantes)</span><input class="input" id="drem" inputmode="numeric" value="${d.remaining ?? ''}" placeholder="—"></label>
+        <label class="field"><span>Saldo devedor atual (R$)</span><input class="input" id="db" inputmode="decimal" value="${d.balance ? U.num(d.balance) : ''}" placeholder="parcela × em aberto"></label>
         <label class="field"><span>Saldo em</span><input class="input" type="date" id="dbd" value="${d.balance_date || U.today()}"></label>
         <label class="field"><span>Juros ao mês (%)</span><input class="input" id="dr" inputmode="decimal" value="${d.rate ? String(d.rate).replace('.', ',') : ''}" placeholder="Ex.: 2,5"></label>
         <label class="field"><span>Situação</span><select class="input" id="ds">${Object.entries(Debts.STATUS).map(([k, v]) => UI.opt(k, v, d.status)).join('')}</select></label>
         <label class="field"><span>Valor em atraso (R$)</span><input class="input" id="dov" inputmode="decimal" value="${d.overdue ? U.num(d.overdue) : ''}" placeholder="0,00"></label>
         <label class="field"><span>Origem da informação</span><select class="input" id="dsrc">${Object.entries(Debts.SOURCES).map(([k, v]) => UI.opt(k, v, d.source || 'manual')).join('')}</select></label>
         <label class="field"><span>Conta de pagamento (opcional)</span><select class="input" id="dacc">${UI.opt('', '—', d.account_id)}${UI.accountOptions(d.account_id)}</select></label>
-        <label class="check full"><input type="checkbox" id="dsync" ${d.sync_expenses !== false ? 'checked' : ''}> Lançar os vencimentos mensais em <b>Despesas</b> (categoria "Empréstimos e dívidas")</label>
+        <label class="check full"><input type="checkbox" id="dsync" ${d.sync_expenses !== false ? 'checked' : ''}> Mostrar todas as parcelas em <b>Despesas</b> desde a data da contratação (categoria "Empréstimos e dívidas")</label>
+        <label class="check full" id="dpnw"><input type="checkbox" id="dpaidnext" ${d.paid_until_next ? 'checked' : ''}> Deixar a dívida <b>quitada até o movimento da próxima parcela</b> (marca como pagas as parcelas anteriores ao próximo vencimento)</label>
         <p class="small full" id="dsched" style="margin:0"></p>
         <label class="field full"><span>Observações</span><textarea class="input" id="dno" rows="2">${U.esc(d.notes || '')}</textarea></label>
-        <p class="small muted full" style="margin:0">Dica: com a data de contratação e o total de parcelas, a 1ª parcela vence no mês seguinte à contratação e as parcelas restantes são calculadas sozinhas. O Custo Efetivo Total (CET) e os juros mensais aparecem no contrato ou no aplicativo do banco. Se não souber, deixe em branco.</p>
+        <p class="small muted full" style="margin:0">Dica: todas as parcelas do contrato ficam visíveis dentro do empréstimo/financiamento e em Despesas mês a mês desde a contratação.</p>
         <p class="err full" id="derr"></p></div>`,
       onOpen: (b) => {
         const upd = () => {
           const out = $('#dsched', b); if (!out) return;
+          const syncOn = $('#dsync', b).checked;
+          const paidNext = $('#dpaidnext', b).checked;
+          $('#dpnw', b).style.opacity = syncOn ? '1' : '.5';
+          $('#dpaidnext', b).disabled = !syncOn;
           const inst = U.parseMoney($('#di', b).value || '0') || 0;
-          const tot = intOrNull($('#dtot', b).value), rem = intOrNull($('#drem', b).value), due = intOrNull($('#ddue', b).value);
+          const tot = intOrNull($('#dtot', b).value), rem = paidNext && tot ? null : intOrNull($('#drem', b).value), due = intOrNull($('#ddue', b).value);
           const con = $('#dcon', b).value || null;
-          const sched = Debts.calcSchedule({ ...d, contract_date: con, total_installments: tot, remaining: rem, due_day: due >= 1 && due <= 31 ? due : null, status: $('#ds', b).value }, { paidNums: paidNumsOf(d.id) });
-          $('#drem', b).placeholder = con && tot ? `${sched.remaining} (calculado)` : '—';
-          if (!$('#dsync', b).checked) { out.innerHTML = '<span class="muted">Os vencimentos não serão lançados em Despesas.</span>'; return; }
-          if (!(inst > 0)) { out.innerHTML = '<span class="muted">Informe a parcela mensal para lançar os vencimentos em Despesas.</span>'; return; }
-          if (!sched.items.length) { out.innerHTML = '<span class="muted">Informe a data de contratação e o total de parcelas (ou as parcelas restantes) para lançar os vencimentos em Despesas.</span>'; return; }
-          out.innerHTML = `${icon('calendar')} <b>${sched.items.length} vencimento(s)</b> de ${U.money(inst)} em Despesas, de ${U.fmtDate(sched.firstDate)} a ${U.fmtDate(sched.lastDate)}${sched.total ? ` (parcelas ${sched.items[0].number} a ${sched.items[sched.items.length - 1].number} de ${sched.total})` : ''}.`;
+          const sched = Debts.calcSchedule({ ...d, contract_date: con, total_installments: tot, remaining: rem, due_day: due >= 1 && due <= 31 ? due : null, status: $('#ds', b).value, paid_until_next: paidNext });
+          $('#drem', b).placeholder = tot ? `${sched.remaining} (calculado)` : '—';
+          if (!syncOn) { out.innerHTML = '<span class="muted">As parcelas não serão lançadas em Despesas.</span>'; return; }
+          if (!(inst > 0)) { out.innerHTML = '<span class="muted">Informe a parcela mensal para gerar as parcelas em Despesas.</span>'; return; }
+          if (!sched.items.length) { out.innerHTML = '<span class="muted">Informe o total de parcelas e a data de contratação (ou as parcelas restantes) para gerar as parcelas.</span>'; return; }
+          out.innerHTML = `${icon('calendar')} <b>${sched.total} parcela(s)</b> de ${U.money(inst)} em Despesas (${U.fmtDate(sched.firstDate)} a ${U.fmtDate(sched.lastDate)}): <b class="pos">${sched.paidCount} paga(s)</b> e <b class="warn">${sched.remaining} em aberto</b>${sched.nextDate ? ` • próxima: <b>${sched.nextNumber}/${sched.total}</b> em ${U.fmtDate(sched.nextDate)}` : ''}.`;
         };
-        ['#di', '#dtot', '#drem', '#ddue', '#dcon', '#ds', '#dsync'].forEach((s) => { const el = $(s, b); if (el) { el.addEventListener('input', upd); el.addEventListener('change', upd); } });
+        ['#di', '#dtot', '#drem', '#ddue', '#dcon', '#ds', '#dsync', '#dpaidnext'].forEach((s) => { const el = $(s, b); if (el) { el.addEventListener('input', upd); el.addEventListener('change', upd); } });
         upd();
       },
       actions: [
-        ...(!isNew ? [{ label: icon('trash') + 'Excluir', cls: 'danger', left: true, onClick: async () => { if (!(await UI.confirm('Excluir esta dívida? Os vencimentos pendentes dela em Despesas também serão excluídos. Os pagamentos já efetuados continuam nas contas.', { danger: true, ok: 'Excluir' }))) return false; await Debts.remove(d.id); UI.toast('Dívida excluída', 'ok'); } }] : []),
+        ...(!isNew ? [{ label: icon('trash') + 'Excluir', cls: 'danger', left: true, onClick: async () => { if (!(await UI.confirm('Excluir esta dívida? Os vencimentos em aberto dela em Despesas também serão excluídos. Os pagamentos já efetuados continuam nas contas.', { danger: true, ok: 'Excluir' }))) return false; await Debts.remove(d.id); UI.toast('Dívida excluída', 'ok'); } }] : []),
         { label: 'Cancelar' },
         { label: 'Salvar', cls: 'primary', onClick: async (b) => {
           const name = $('#dn', b).value.trim();
@@ -168,58 +173,126 @@ Views.dividas = (() => {
           let bal = balRaw ? U.parseMoney(balRaw) : 0;
           if (bal === null || bal < 0) return err('Saldo devedor inválido.');
           const inst = U.parseMoney($('#di', b).value || '0'); if (inst === null || inst < 0) return err('Parcela inválida.');
-          const ov = U.parseMoney($('#dov', b).value || '0'); if (ov === null || ov < 0) return err('Valor em atraso inválido.');
+          let ov = U.parseMoney($('#dov', b).value || '0'); if (ov === null || ov < 0) return err('Valor em atraso inválido.');
           const rate = $('#dr', b).value.trim() ? Number($('#dr', b).value.replace(/\./g, '').replace(',', '.').replace('%', '')) : 0;
           if (!isFinite(rate) || rate < 0 || rate > 100) return err('Juros ao mês inválidos (use, por exemplo, 2,5).');
           const due = intOrNull($('#ddue', b).value); if (due !== null && !(due >= 1 && due <= 31)) return err('Dia de vencimento deve ser de 1 a 31.');
           const con = $('#dcon', b).value || null; if (con && !/^\d{4}-\d{2}-\d{2}$/.test(con)) return err('Data de contratação inválida.');
           const tot = intOrNull($('#dtot', b).value); if (tot !== null && !(tot >= 1 && tot <= 420)) return err('Total de parcelas deve ser de 1 a 420.');
           let rem = intOrNull($('#drem', b).value); if (rem !== null && !(rem >= 0 && rem <= 420)) return err('Parcelas restantes inválidas.');
-          if (tot && rem !== null && rem > tot) return err('As parcelas restantes não podem ser maiores que o total do contrato.');
+          if (tot && rem !== null && rem > tot) return err('As parcelas em aberto não podem ser maiores que o total do contrato.');
           if (con && con > U.addMonths(U.today(), 12)) return err('A data de contratação está muito no futuro.');
           let status = $('#ds', b).value;
+          const syncOn = $('#dsync', b).checked;
+          const paidUntilNext = syncOn && $('#dpaidnext', b).checked;
           const id = d.id || U.uuid();
-          if (rem === null && tot) {
-            const sched = Debts.calcSchedule({ ...d, id, contract_date: con, total_installments: tot, remaining: null, due_day: due, status }, { paidNums: paidNumsOf(d.id) });
+          if (tot && (rem === null || (paidUntilNext && con))) {
+            const sched = Debts.calcSchedule({ ...d, id, contract_date: con, total_installments: tot, remaining: paidUntilNext ? null : rem, due_day: due, status, paid_until_next: paidUntilNext });
             rem = sched.remaining;
+          }
+          if (paidUntilNext) {
+            ov = 0;
+            if (status === 'atrasada') status = rem === 0 && tot ? 'quitada' : 'em_dia';
           }
           if (!balRaw && inst > 0 && rem > 0) bal = inst * rem;
           if (bal === 0 && (balRaw || !(rem > 0))) status = 'quitada';
-          const saved = await Store.upsert('debts', { ...d, id, name, creditor: $('#dcr', b).value.trim(), kind: $('#dk', b).value, balance: bal, balance_date: $('#dbd', b).value || U.today(), installment: inst, remaining: rem, total_installments: tot, contract_date: con, rate, due_day: due, status, overdue: ov, source: $('#dsrc', b).value, account_id: $('#dacc', b).value || null, sync_expenses: $('#dsync', b).checked, notes: $('#dno', b).value.trim() });
-          const sr = await Debts.syncExpenses(saved);
-          const extra = saved.sync_expenses !== false && sr.total ? ` • ${sr.total} vencimento(s) em Despesas` : '';
+          const saved = await Store.upsert('debts', { ...d, id, name, creditor: $('#dcr', b).value.trim(), kind: $('#dk', b).value, balance: bal, balance_date: $('#dbd', b).value || U.today(), installment: inst, remaining: rem, total_installments: tot, contract_date: con, rate, due_day: due, status, overdue: ov, source: $('#dsrc', b).value, account_id: $('#dacc', b).value || null, sync_expenses: syncOn, paid_until_next: paidUntilNext, notes: $('#dno', b).value.trim() });
+          const sr = await Debts.syncExpenses(saved, { forceSettleUntilNext: paidUntilNext && !d.paid_until_next });
+          const extra = saved.sync_expenses !== false && sr.total ? ` • ${sr.total} parcela(s) em Despesas (${sr.paid} paga(s), ${sr.open} em aberto)` : '';
           UI.toast((isNew ? 'Dívida cadastrada' : 'Dívida atualizada') + extra, 'ok', extra ? 4500 : 3000);
         } },
       ],
     });
   }
 
-  function detail(d) {
-    if (!d) return;
-    const pays = Debts.paidPayments(d.id);
-    const pend = Debts.pendingInstallments(d.id);
-    const end = Debts.endDate(d);
-    const today = U.today();
-    const MAXP = 12;
-    const parcTxt = d.total_installments ? `${d.remaining ?? 0} de ${d.total_installments} restantes` : (d.remaining ? d.remaining + ' restantes' : '');
-    UI.modal({
-      title: d.name, wide: true,
-      body: `<div class="kpis">
-          <div class="kpi"><span>Saldo devedor</span><b class="money">${U.money(d.balance)}</b><small>em ${U.fmtDate(d.balance_date || U.today())}</small></div>
+  function detail(d0, initFilter = 'todas') {
+    if (!d0) return;
+    let filter = initFilter;
+    let dirty = false;
+
+    const renderBody = (d) => {
+      const all = Debts.installmentsOf(d.id);
+      const openList = all.filter((t) => t.status === 'pendente');
+      const paidList = all.filter((t) => t.status !== 'pendente');
+      const shown = filter === 'abertas' ? openList : filter === 'pagas' ? paidList : all;
+      const today = U.today();
+      const nextTx = openList.find((t) => t.date >= today) || openList[0] || null;
+      const pastOpen = openList.filter((t) => t.date < today);
+      const end = Debts.endDate(d);
+      const totalPaidAmt = paidList.reduce((a, t) => a + t.amount, 0);
+      const totalOpenAmt = openList.reduce((a, t) => a + t.amount, 0);
+      const shownAmt = shown.reduce((a, t) => a + t.amount, 0);
+      const totalCount = d.total_installments || all.length || 0;
+      const parcTxt = totalCount ? `${openList.length || (d.remaining ?? 0)} em aberto de ${totalCount}` : (d.remaining ? d.remaining + ' em aberto' : '');
+
+      return `<div class="kpis">
+          <div class="kpi"><span>Saldo devedor</span><b class="money">${U.money(d.balance)}</b><small>em ${U.fmtDate(d.balance_date || today)}</small></div>
           <div class="kpi"><span>Parcela</span><b class="money">${d.installment ? U.money(d.installment) : '—'}</b><small>${parcTxt}${d.due_day ? ' • vence dia ' + d.due_day : ''}</small></div>
-          <div class="kpi"><span>Juros</span><b>${rateTxt(d.rate)}</b><small>${d.rate ? '≈ ' + ((Math.pow(1 + d.rate / 100, 12) - 1) * 100).toFixed(1).replace('.', ',') + '% ao ano' : ''}</small></div>
-          <div class="kpi"><span>Situação</span><b>${statusBadge(d)}</b><small>${d.overdue ? U.money(d.overdue) + ' vencido' : ''}</small></div></div>
-        <p class="small muted">${U.esc(Debts.KINDS[d.kind] || '')}${d.creditor ? ' • ' + U.esc(d.creditor) : ''} • ${U.esc(Debts.SOURCES[d.source] || 'Cadastro manual')}${d.contract_date ? ' • contratado em ' + U.fmtDate(d.contract_date) : ''}${end && d.status !== 'quitada' ? ' • término previsto em ' + U.fmtDate(end) : ''}${d.notes ? '<br>' + U.esc(d.notes) : ''}</p>
-        <h3 style="margin-top:14px">Próximos vencimentos em Despesas</h3>
-        ${pend.length ? `<div class="tablewrap"><table class="tbl"><thead><tr><th>Parcela</th><th>Vencimento</th><th>Conta</th><th>Situação</th><th class="right">Valor</th></tr></thead><tbody>${pend.slice(0, MAXP).map((t) => `<tr><td>${t.installments > 1 ? `${t.installment}/${t.installments}` : '—'}</td><td>${U.fmtDate(t.date)}</td><td>${U.esc(F.accName(t.account_id))}</td><td>${t.date < today ? '<span class="badge neg">Atrasada</span>' : '<span class="badge warn">A pagar</span>'}</td><td class="right money">${U.money(t.amount)}</td></tr>`).join('')}</tbody><tfoot><tr><td colspan="4">${pend.length > MAXP ? `+ ${pend.length - MAXP} parcela(s) • ` : ''}Total a pagar</td><td class="right money">${U.money(pend.reduce((a, t) => a + t.amount, 0))}</td></tr></tfoot></table></div>`
-          : `<p class="empty">${d.status === 'quitada' ? 'Contrato quitado.' : d.sync_expenses === false ? 'O lançamento automático em Despesas está desligado para esta dívida.' : 'Nenhum vencimento lançado. Edite a dívida e informe a parcela, a data de contratação e o total de parcelas.'}</p>`}
-        <h3 style="margin-top:14px">Pagamentos realizados</h3>
-        ${pays.length ? `<div class="tablewrap"><table class="tbl"><thead><tr><th>Data</th><th>Descrição</th><th>Conta</th><th class="right">Valor</th></tr></thead><tbody>${pays.map((t) => `<tr><td>${U.fmtDate(t.date)}</td><td>${U.esc(t.description || '')}</td><td>${U.esc(F.accName(t.account_id))}</td><td class="right money">${U.money(t.amount)}</td></tr>`).join('')}</tbody><tfoot><tr><td colspan="3">Total pago</td><td class="right money">${U.money(pays.reduce((a, t) => a + t.amount, 0))}</td></tr></tfoot></table></div>` : '<p class="empty">Nenhum pagamento registrado ainda.</p>'}`,
+          <div class="kpi"><span>Pagas</span><b class="money pos">${U.money(totalPaidAmt)}</b><small>${paidList.length}${totalCount ? ' de ' + totalCount : ''} parcela(s) quitada(s)</small></div>
+          <div class="kpi"><span>Situação</span><b>${statusBadge(d)}</b><small>${nextTx ? 'próxima em ' + U.fmtDate(nextTx.date) : (d.overdue ? U.money(d.overdue) + ' vencido' : 'sem pendências')}</small></div></div>
+        <div class="row between" style="margin:6px 0 10px;gap:8px">
+          <p class="small muted" style="margin:0">${U.esc(Debts.KINDS[d.kind] || '')}${d.creditor ? ' • ' + U.esc(d.creditor) : ''} • ${U.esc(Debts.SOURCES[d.source] || 'Cadastro manual')}${d.contract_date ? ' • contratado em ' + U.fmtDate(d.contract_date) : ''}${end ? ' • término em ' + U.fmtDate(end) : ''}${d.paid_until_next ? ' • <span class="badge pos">Quitada até a próxima</span>' : ''}${d.notes ? '<br>' + U.esc(d.notes) : ''}</p>
+          ${d.status !== 'quitada' && (pastOpen.length > 0 || !d.paid_until_next) ? `<button class="btn sm" data-settle-next title="Marca como pagas todas as parcelas anteriores ao próximo vencimento e mantém a dívida em dia até a próxima parcela">${icon('check')}${pastOpen.length ? `Quitar até a próxima (${pastOpen.length})` : 'Manter quitada até a próxima'}</button>` : ''}
+        </div>
+        <div class="row between" style="margin-top:12px;margin-bottom:8px">
+          <h3 style="margin:0">Parcelas do contrato</h3>
+          <div class="seg" data-inst-filter>
+            <button type="button" data-f="todas" class="${filter === 'todas' ? 'on' : ''}">Todas (${all.length})</button>
+            <button type="button" data-f="abertas" class="${filter === 'abertas' ? 'on' : ''}">Em aberto (${openList.length})</button>
+            <button type="button" data-f="pagas" class="${filter === 'pagas' ? 'on' : ''}">Pagas (${paidList.length})</button>
+          </div>
+        </div>
+        ${all.length ? (shown.length ? `<div class="tablewrap" data-inst-scroll style="max-height:420px;overflow:auto"><table class="tbl"><thead><tr><th>Parcela</th><th>Vencimento</th><th>Conta</th><th>Situação</th><th class="right">Valor</th><th></th></tr></thead><tbody>${shown.map((t) => {
+          const isPend = t.status === 'pendente';
+          const isNext = nextTx && t.id === nextTx.id;
+          const badge = !isPend ? '<span class="badge pos">Paga</span>' : (t.date < today ? '<span class="badge neg">Atrasada</span>' : '<span class="badge warn">Em aberto</span>');
+          const pLbl = t.installments > 1 ? `${t.installment}/${t.installments}` : (t.debt_installment ? `${t.debt_installment}` : 'Avulso');
+          return `<tr><td><b>${pLbl}</b></td><td>${U.fmtDate(t.date)}${isNext ? ' <span class="badge info">Próxima</span>' : ''}</td><td>${U.esc(F.accName(t.account_id))}</td><td>${badge}</td><td class="right money">${U.money(t.amount)}</td><td class="right nowrap"><button class="btn sm ${isPend ? '' : 'ghost'}" data-toggle-inst="${t.id}">${isPend ? icon('check') + 'Pagar' : 'Reabrir'}</button></td></tr>`;
+        }).join('')}</tbody><tfoot><tr><td colspan="4">${filter === 'todas' ? `${paidList.length} paga(s) (${U.money(totalPaidAmt)}) • ${openList.length} em aberto (${U.money(totalOpenAmt)})` : `Total (${shown.length} ${shown.length === 1 ? 'parcela' : 'parcelas'})`}</td><td class="right money">${U.money(shownAmt)}</td><td></td></tr></tfoot></table></div>`
+          : `<p class="empty">Nenhuma parcela ${filter === 'pagas' ? 'paga' : 'em aberto'} neste contrato.</p>`)
+          : `<p class="empty">${d.sync_expenses === false ? 'O lançamento em Despesas está desativado para este contrato.' : 'Nenhuma parcela gerada ainda. Clique em Editar e informe a data de contratação, o total de parcelas e o valor da parcela.'}</p>`}`;
+    };
+
+    const bindBody = (b) => {
+      $$('[data-inst-filter] button', b).forEach((btn) => (btn.onclick = () => {
+        filter = btn.dataset.f;
+        const cur = Store.get('debts', d0.id) || d0;
+        b.innerHTML = renderBody(cur);
+        bindBody(b);
+      }));
+      const sn = $('[data-settle-next]', b);
+      if (sn) sn.onclick = async () => {
+        const cur = Store.get('debts', d0.id) || d0;
+        const upd = await Debts.settleUntilNext(cur);
+        dirty = true;
+        UI.toast('Parcelas anteriores quitadas até o próximo vencimento', 'ok');
+        b.innerHTML = renderBody(upd || cur);
+        bindBody(b);
+      };
+      $$('[data-toggle-inst]', b).forEach((btn) => (btn.onclick = async () => {
+        const sc = $('[data-inst-scroll]', b);
+        const top = sc ? sc.scrollTop : 0;
+        const savedTx = await Debts.toggleInstallment(btn.dataset.toggleInst);
+        dirty = true;
+        const cur = Store.get('debts', d0.id) || d0;
+        b.innerHTML = renderBody(cur);
+        bindBody(b);
+        const sc2 = $('[data-inst-scroll]', b);
+        if (sc2) sc2.scrollTop = top;
+        if (savedTx) UI.toast(savedTx.status === 'pendente' ? 'Parcela voltou para em aberto' : 'Parcela marcada como paga', 'ok');
+      }));
+    };
+
+    UI.modal({
+      title: d0.name, wide: true,
+      body: renderBody(d0),
+      onOpen: (b) => bindBody(b),
+      onClose: () => { if (dirty) App.render(); },
       actions: [
-        { label: icon('edit') + 'Editar', left: true, onClick: () => { setTimeout(() => form(d), 0); } },
-        ...(pend.length ? [{ label: 'Ver em Despesas', onClick: () => { App.go('despesas'); } }] : []),
+        { label: icon('edit') + 'Editar', left: true, onClick: () => { const cur = Store.get('debts', d0.id) || d0; setTimeout(() => form(cur), 0); } },
+        { label: 'Ver em Despesas', onClick: () => { App.go('despesas'); } },
         { label: 'Fechar' },
-        ...(d.status !== 'quitada' ? [{ label: icon('check') + 'Registrar pagamento', cls: 'primary', onClick: () => { setTimeout(() => payForm(d), 0); } }] : []),
+        ...(d0.status !== 'quitada' ? [{ label: icon('check') + 'Registrar pagamento', cls: 'primary', onClick: () => { const cur = Store.get('debts', d0.id) || d0; setTimeout(() => payForm(cur), 0); } }] : []),
       ],
     });
   }
@@ -346,18 +419,23 @@ Views.emprestimos = (() => {
     </div>
     ${shown.length ? `<div class="acc-grid">${shown.map((d) => {
       const end = Debts.endDate(d);
-      const pend = Debts.pendingInstallments(d.id);
-      const parcLabel = d.total_installments ? `${d.remaining ?? 0}/${d.total_installments}` : (d.remaining ? d.remaining + 'x' : '—');
+      const allInst = Debts.installmentsOf(d.id);
+      const pend = allInst.filter((t) => t.status === 'pendente');
+      const paid = allInst.filter((t) => t.status !== 'pendente');
+      const today = U.today();
+      const nextTx = pend.find((t) => t.date >= today) || pend[0] || null;
+      const totalN = d.total_installments || allInst.length || 0;
+      const parcLabel = totalN ? `${paid.length} pagas • ${pend.length || (d.remaining ?? 0)} em aberto (${totalN})` : (d.remaining ? d.remaining + 'x em aberto' : '—');
       return `<div class="card acc" data-d="${d.id}" style="--c:${U.esc(d.color || '#be123c')}">
         <div class="row between"><div><h4>${U.esc(d.name)}</h4><span class="small muted">${U.esc(Debts.KINDS[d.kind] || '')}${d.creditor ? ' • ' + U.esc(d.creditor) : ''}</span></div>${Views.dividas.statusBadge(d)}</div>
         <div class="bal money">${U.money(d.balance || 0)}</div>
-        <div class="small muted">saldo devedor${d.balance_date ? ' em ' + U.fmtDate(d.balance_date) : ''}${d.contract_date ? ' • contratado em ' + U.fmtDate(d.contract_date) : ''}</div>
+        <div class="small muted">saldo devedor${d.balance_date ? ' em ' + U.fmtDate(d.balance_date) : ''}${d.contract_date ? ' • contratado em ' + U.fmtDate(d.contract_date) : ''}${d.paid_until_next ? ' • <span class="badge pos">Quitada até a próxima</span>' : ''}</div>
         <div class="row between small" style="margin-top:10px"><span>Parcela <b class="money">${d.installment ? U.money(d.installment) : '—'}</b></span><span>Parcelas <b>${parcLabel}</b></span><span>Juros <b>${R(d.rate)}</b></span></div>
-        <div class="row between small muted" style="margin-top:6px"><span>${end && d.status !== 'quitada' ? 'Termina em ' + U.fmtMonth(end.slice(0, 7)) : ''}${pend.length ? (end && d.status !== 'quitada' ? ' • ' : '') + pend.length + ' em Despesas' : ''}</span>${d.status !== 'quitada' ? `<button class="btn sm" data-pay="${d.id}">${icon('check')}Pagar parcela</button>` : ''}</div>
+        <div class="row between small muted" style="margin-top:6px"><span>${nextTx ? 'Próxima: ' + U.fmtDate(nextTx.date) : (end && d.status !== 'quitada' ? 'Termina em ' + U.fmtMonth(end.slice(0, 7)) : '')}${end && nextTx ? ' • até ' + U.fmtMonth(end.slice(0, 7)) : ''}</span><span class="row" style="gap:6px">${allInst.length ? `<button class="btn sm ghost" data-open-inst="${d.id}">Parcelas (${allInst.length})</button>` : ''}${d.status !== 'quitada' ? `<button class="btn sm" data-pay="${d.id}">${icon('check')}Pagar</button>` : ''}</span></div>
       </div>`;
     }).join('')}</div>`
       : `<div class="card empty">${S.q || S.kind ? 'Nenhum contrato encontrado com esses filtros.' : 'Nenhum empréstimo ou financiamento cadastrado. Use <b>Novo empréstimo / financiamento</b>, importe o <b>Registrato</b> ou traga do banco pelo <a href="#/bancos">Open Finance</a> (botão Empréstimos).'}</div>`}
-    <p class="small muted" style="margin-top:14px">Os vencimentos mensais são lançados automaticamente em <a href="#/despesas">Despesas</a> para conferência mês a mês, e os contratos também aparecem em <a href="#/dividas">Endividamento</a>.</p>`;
+    <p class="small muted" style="margin-top:14px">Todas as parcelas (desde a data da contratação) são mostradas dentro de cada contrato e em <a href="#/despesas">Despesas</a>. Os contratos também aparecem em <a href="#/dividas">Endividamento</a>.</p>`;
   }
   function bind(root) {
     bindSearch($('#lnq', root), (v) => (S.q = v));
@@ -365,7 +443,8 @@ Views.emprestimos = (() => {
     $('#lnpaid', root).onchange = (e) => { S.showPaid = e.target.checked; App.render(); };
     $$('[data-a="new"]', root).forEach((b) => (b.onclick = () => Views.dividas.form(null, { kind: S.kind || 'credito_pessoal' })));
     $$('[data-a="scr"]', root).forEach((b) => (b.onclick = () => Views.dividas.importSCR()));
-    $$('[data-d]', root).forEach((c) => (c.onclick = (e) => { if (e.target.closest('[data-pay]')) return; Views.dividas.detail(Store.get('debts', c.dataset.d)); }));
+    $$('[data-d]', root).forEach((c) => (c.onclick = (e) => { if (e.target.closest('[data-pay],[data-open-inst]')) return; Views.dividas.detail(Store.get('debts', c.dataset.d)); }));
+    $$('[data-open-inst]', root).forEach((b) => (b.onclick = () => Views.dividas.detail(Store.get('debts', b.dataset.openInst))));
     $$('[data-pay]', root).forEach((b) => (b.onclick = () => Views.dividas.payForm(Store.get('debts', b.dataset.pay))));
   }
   return { title: 'Empréstimos e financiamentos', render, bind };

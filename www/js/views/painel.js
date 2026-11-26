@@ -30,7 +30,6 @@ Views.painel = {
     const nw = F.netWorthSeries(U.addMonthYM(ym, -11), ym);
     const up = F.upcoming(15).slice(0, 8);
     const hoje = U.today();
-    const budgets = F.budgetStatus(ym).slice(0, 6);
     const despCats = s.cats.filter((c) => c.type === 'despesa');
     const recCats = s.cats.filter((c) => c.type === 'receita');
     const debt = Debts.overview();
@@ -107,9 +106,6 @@ Views.painel = {
       </div>
       <div class="card"><div class="row between"><h3>Contas a pagar e receber</h3><a href="#ptx" class="small" data-a="pendentes">ver pendentes</a></div>
         ${up.length ? `<ul class="mini">${up.map((t) => `<li><span><b>${U.esc(t.description)}</b><br><small class="muted">${U.fmtDate(t.date)} • ${U.esc(t.type === 'transferencia' ? 'Transferência' : F.catName(t.category_id))}</small></span>${t.date < hoje ? '<span class="badge neg" style="flex:none">atrasado</span>' : ''}<b class="money ${t.type === 'receita' ? 'pos' : t.type === 'despesa' ? 'neg' : ''}">${U.money(t.amount)}</b><button class="btn sm" data-pay="${t.id}" title="Marcar como pago/recebido">${UI.icon('check')}</button></li>`).join('')}</ul>` : '<p class="empty">Nenhuma conta pendente nos próximos 15 dias.</p>'}
-      </div>
-      <div class="card"><div class="row between"><h3>Orçamentos do mês</h3><a href="#/orcamentos" class="small">gerenciar</a></div>
-        ${budgets.length ? budgets.map((b) => { const p = b.amount ? b.spent / b.amount : 0; return `<div style="margin:10px 0"><div class="row between small"><span><i class="dot" style="background:${b.color}"></i> ${U.esc(b.name)}</span><span class="money">${U.money(b.spent)} / ${U.money(b.amount)}</span></div><div class="bar ${p > 1 ? 'over' : p > 0.85 ? 'near' : ''}" style="margin-top:5px"><i style="width:${Math.min(100, p * 100).toFixed(1)}%"></i></div></div>`; }).join('') : '<p class="empty">Defina limites de gastos por categoria em <a href="#/orcamentos">Orçamentos</a>.</p>'}
       </div>
     </div>
     <h2 class="dsec" id="ptxh">${UI.icon('lancamentos')} Lançamentos</h2>
