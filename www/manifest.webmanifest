@@ -1,7 +1,7 @@
 {
   "name": "Vorticis Finanças Pessoais",
   "short_name": "Vorticis Finanças",
-  "description": "Controle de finanças pessoais: contas, cartões, orçamentos, extratos e relatórios.",
+  "description": "Controle de finanças pessoais: contas, cartões, empréstimos, extratos e relatórios.",
   "lang": "pt-BR",
   "start_url": "./index.html",
   "scope": "./",

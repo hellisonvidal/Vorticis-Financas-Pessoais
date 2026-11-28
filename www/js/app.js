@@ -7,7 +7,6 @@ const App = (() => {
   const NAV = [
     ['§', 'Visão geral'], ['painel', 'Painel'], ['receitas', 'Receitas'], ['despesas', 'Despesas'],
     ['§', 'Contas e crédito'], ['contas', 'Contas'], ['cartoes', 'Cartões de crédito'], ['emprestimos', 'Empréstimos e financiamentos'], ['dividas', 'Endividamento'],
-    ['§', 'Planejamento'], ['orcamentos', 'Orçamentos'], ['metas', 'Metas'],
     ['§', 'Ferramentas'], ['importar', 'Importar extrato'], ['bancos', 'Open Finance'], ['relatorios', 'Relatórios'], ['categorias', 'Categorias e regras'], ['config', 'Configurações'],
   ];
   const state = { month: U.monthOf(U.today()), route: 'painel', param: null };

@@ -36,7 +36,7 @@ Views.config = (() => {
     <div class="card">
       <h3>${icon('card')} Cálculo de receitas</h3>
       <label class="check"><input type="checkbox" id="ccinc" ${F.cardCreditIsIncome() ? 'checked' : ''}> Contar créditos no cartão de crédito como receita</label>
-      <p class="small muted">Desligado (recomendado): valores que entram no cartão — pagamento de fatura, devoluções, valores que saíram do cartão para a conta — <b>não</b> entram como receita no Painel, em Receitas, nos relatórios e nos orçamentos. O saldo e a fatura do cartão continuam corretos. Para devoluções de compras, prefira marcar <b>Estorno</b> no lançamento: ele abate da despesa.</p>
+      <p class="small muted">Desligado (recomendado): valores que entram no cartão — pagamento de fatura, devoluções, valores que saíram do cartão para a conta — <b>não</b> entram como receita no Painel, em Receitas e nos relatórios. O saldo e a fatura do cartão continuam corretos. Para devoluções de compras, prefira marcar <b>Estorno</b> no lançamento: ele abate da despesa.</p>
     </div>
     <div class="card">
       <h3>Segurança e aparência</h3>
@@ -141,7 +141,7 @@ Views.config = (() => {
       await Sample.load(); UI.toast('Dados de exemplo carregados', 'ok'); App.go('painel');
     });
     on('dclearsample', async () => {
-      if (!(await UI.confirm('Remover contas, lançamentos, orçamentos e metas de exemplo?', { ok: 'Remover', danger: true }))) return;
+      if (!(await UI.confirm('Remover contas, lançamentos e dívidas de exemplo?', { ok: 'Remover', danger: true }))) return;
       const accs = F.accounts(true).filter((a) => a.sample).map((a) => a.id);
       await Store.removeMany('transactions', F.txs().filter((t) => t.sample || accs.includes(t.account_id) || accs.includes(t.to_account_id)).map((t) => t.id));
       await Store.removeMany('goals', Store.all('goals').filter((g) => g.sample || accs.includes(g.account_id)).map((g) => g.id));
@@ -152,9 +152,9 @@ Views.config = (() => {
     });
     on('dwipe', async () => {
       const synced = Sync.loggedIn();
-      if (!(await UI.confirm(`Apagar TODOS os lançamentos, contas, orçamentos e metas${synced ? ' — inclusive na nuvem e nos outros aparelhos sincronizados' : ''}? Recomendamos fazer um backup antes.`, { ok: 'Apagar tudo', danger: true }))) return;
+      if (!(await UI.confirm(`Apagar TODOS os lançamentos, contas e dívidas${synced ? ' — inclusive na nuvem e nos outros aparelhos sincronizados' : ''}? Recomendamos fazer um backup antes.`, { ok: 'Apagar tudo', danger: true }))) return;
       if (!(await UI.confirm('Tem certeza? Esta ação não pode ser desfeita.', { ok: 'Sim, apagar', danger: true }))) return;
-      for (const c of ['transactions', 'accounts', 'budgets', 'goals']) await Store.removeMany(c, Store.all(c).map((r) => r.id));
+      for (const c of ['transactions', 'accounts', 'debts', 'budgets', 'goals']) await Store.removeMany(c, Store.all(c).map((r) => r.id));
       UI.toast('Dados apagados', 'ok'); App.go('painel');
     });
   }
